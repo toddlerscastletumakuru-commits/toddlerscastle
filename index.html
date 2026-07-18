@@ -1401,6 +1401,36 @@ tbody td strong{color:var(--text);font-weight:700;}
   </div>
 </div>
 
+<!-- SEND LOGIN DETAILS MODAL -->
+<div class="modal-ov" id="sendLoginModal">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-hd"><div class="modal-title">📤 Send Login Details</div><button class="modal-x" onclick="closeModal('sendLoginModal')">✕</button></div>
+    <div class="modal-bd">
+      <div style="background:var(--primary-lt);border-radius:10px;padding:0.7rem 1rem;margin-bottom:1rem;font-size:0.85rem;color:var(--text2);">
+        Sending login for: <strong id="sendLoginName" style="color:var(--primary)"></strong>
+      </div>
+      <div class="f-row full">
+        <label class="f-lbl">Phone Number (for WhatsApp / SMS)</label>
+        <input class="f-in" id="sendLoginPhone" type="tel" placeholder="10-digit mobile number">
+      </div>
+      <div class="f-row full">
+        <label class="f-lbl">Message Preview</label>
+        <textarea class="f-in" id="sendLoginPreview" rows="8" style="font-family:monospace;font-size:0.82rem;"></textarea>
+        <div style="font-size:0.72rem;color:var(--text3);margin-top:0.3rem;">You can edit this message before sending.</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;margin-top:0.5rem;">
+        <button class="btn btn-green" style="justify-content:center;" onclick="sendLoginViaWhatsApp()">💬 WhatsApp</button>
+        <button class="btn btn-blue" style="justify-content:center;" onclick="sendLoginViaSMS()">📱 SMS</button>
+        <button class="btn btn-primary" style="justify-content:center;" onclick="sendLoginViaEmail()">✉️ Email</button>
+        <button class="btn btn-ghost" style="justify-content:center;" onclick="copyLoginDetails()">📋 Copy Text</button>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="closeModal('sendLoginModal')">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- FEE MODAL -->
 <div class="modal-ov" id="feeModal">
   <div class="modal" style="max-width:440px">
@@ -1655,6 +1685,11 @@ function initDB(){
 //  AUTH
 // ═══════════════════════════════
 let CU=null; // current user
+function isAdmin(){return CU&&CU.role==='admin';}
+function adminOnlyGuard(){
+  if(!isAdmin()){showToast('Only Admin can delete records','error');return true;}
+  return false;
+}
 
 function doLogin(){
   const u=document.getElementById('loginUser').value.trim();
@@ -1910,7 +1945,7 @@ function renderEnquiries(){
     <td class="td-act">
       <button class="btn btn-xs btn-ghost" onclick="editEnq(${e.id})">✏️</button>
       <button class="btn btn-xs btn-green" onclick="convertToAdm(${e.id})" title="Convert to Admission">🎓 Admit</button>
-      <button class="btn btn-xs btn-danger" onclick="deleteEnq(${e.id})">🗑️</button>
+      ${isAdmin()?`<button class="btn btn-xs btn-danger" onclick="deleteEnq(${e.id})">🗑️</button>`:''}
     </td>
   </tr>`).join('');
 }
@@ -1966,6 +2001,7 @@ function cancelEnqEdit(){
 }
 
 function deleteEnq(id){
+  if(adminOnlyGuard())return;
   if(!confirm('Delete this enquiry?'))return;
   DB.set('enquiries',(DB.get('enquiries')||[]).filter(e=>e.id!==id));
   renderEnquiries();renderEnqPills();showToast('Enquiry deleted','info');
@@ -2041,7 +2077,7 @@ function renderAdmissions(){
         <button class="btn btn-xs btn-ghost" onclick="editAdm(${a.id})">✏️ Edit</button>
         <button class="btn btn-xs btn-blue" onclick="updateAdmFee(${a.id})">💰 Set Fee</button>
         <button class="btn btn-xs btn-primary" onclick="printAdmCard('${a.name}','${a.phone}')">🪪 Print ID</button>
-        <button class="btn btn-xs btn-danger" onclick="deleteAdm(${a.id})">🗑️</button>
+        ${isAdmin()?`<button class="btn btn-xs btn-danger" onclick="deleteAdm(${a.id})">🗑️</button>`:''}
       </div>
     </div>`).join('');
 }
@@ -2125,6 +2161,7 @@ function updateAdmFee(id){
 }
 
 function deleteAdm(id){
+  if(adminOnlyGuard())return;
   if(!confirm('Remove this admission record?'))return;
   DB.set('admissions',(DB.get('admissions')||[]).filter(a=>a.id!==id));
   renderAdmissions();renderAdmStats();renderPendingAdm();showToast('Admission removed','info');
@@ -2197,7 +2234,7 @@ function renderStudents(){
       <td><span class="badge ${s.status==='Active'?'b-green':s.status==='Left'?'b-red':'b-gray'}">${s.status}</span></td>
       <td class="td-act">
         <button class="btn btn-xs btn-ghost" onclick="openStudentModal(${s.id})">✏️</button>
-        <button class="btn btn-xs btn-danger" onclick="deleteStu(${s.id})">🗑️</button>
+        ${isAdmin()?`<button class="btn btn-xs btn-danger" onclick="deleteStu(${s.id})">🗑️</button>`:''}
       </td>
     </tr>`;
   }).join('');
@@ -2224,6 +2261,7 @@ function saveStudent(){
 }
 
 function deleteStu(id){
+  if(adminOnlyGuard())return;
   if(!confirm('Delete this student?'))return;
   DB.set('students',(DB.get('students')||[]).filter(s=>s.id!==id));
   renderStudents();showToast('Student deleted','info');
@@ -2253,7 +2291,8 @@ function renderTeachers(){
     <td><span class="badge ${t.status==='Active'?'b-green':t.status==='On Leave'?'b-gold':'b-red'}">${t.status}</span></td>
     <td class="td-act">
       <button class="btn btn-xs btn-ghost" onclick="editTch(${t.id})">✏️</button>
-      <button class="btn btn-xs btn-danger" onclick="deleteTch(${t.id})">🗑️</button>
+      ${t.username&&t.password?`<button class="btn btn-xs btn-primary" onclick="openSendLoginModal(${t.id})" title="Send Login Details">📤</button>`:''}
+      ${isAdmin()?`<button class="btn btn-xs btn-danger" onclick="deleteTch(${t.id})">🗑️</button>`:''}
     </td>
   </tr>`).join('');
 }
@@ -2264,6 +2303,7 @@ function saveTeacher(){
   if(!name||!phone){showToast('Fill Name & Phone','error');return;}
   const tchs=DB.get('teachers')||[];
   const obj={name,desig:document.getElementById('t_desig').value,class:document.getElementById('t_class').value,phone,email:document.getElementById('t_email').value,qual:document.getElementById('t_qual').value,join:document.getElementById('t_join').value,dob:document.getElementById('t_dob').value,salary:parseFloat(document.getElementById('t_salary').value)||0,username:document.getElementById('t_user').value,password:document.getElementById('t_pass').value,status:document.getElementById('t_status').value};
+  const isNew=!editTchId;
   if(editTchId){
     const idx=tchs.findIndex(t=>t.id===editTchId);
     if(idx>=0){obj.id=editTchId;tchs[idx]=obj;}
@@ -2274,6 +2314,10 @@ function saveTeacher(){
     showToast('Teacher added ✅','success');
   }
   DB.set('teachers',tchs);editTchId=null;closeModal('tchModal');renderTeachers();
+  // If newly created with login details, offer to send them right away
+  if(isNew&&obj.username&&obj.password){
+    setTimeout(()=>openSendLoginModal(obj.id),400);
+  }
 }
 
 function editTch(id){
@@ -2290,9 +2334,73 @@ function editTch(id){
 }
 
 function deleteTch(id){
+  if(adminOnlyGuard())return;
   if(!confirm('Delete this teacher?'))return;
   DB.set('teachers',(DB.get('teachers')||[]).filter(t=>t.id!==id));
   renderTeachers();showToast('Teacher deleted','info');
+}
+
+// ═══════════════════════════════
+//  SEND LOGIN DETAILS
+// ═══════════════════════════════
+let sendLoginCtx=null;
+function openSendLoginModal(teacherId){
+  const t=(DB.get('teachers')||[]).find(x=>x.id===teacherId);
+  if(!t){showToast('Teacher not found','error');return;}
+  if(!t.username||!t.password){showToast('This teacher has no login username/password set','error');return;}
+  sendLoginCtx=t;
+  const appUrl=window.location.href.split('?')[0].split('#')[0];
+  const msg='🏰 *Toddler\'s Castle Pre-School* — Login Details\n\n'
+    +'Hi '+t.name+',\n\n'
+    +'Your staff login for the school app:\n\n'
+    +'👤 Username: '+t.username+'\n'
+    +'🔑 Password: '+t.password+'\n\n'
+    +'🔗 Login here: '+appUrl+'\n\n'
+    +'Please keep this information private. Contact admin if you face any issues.';
+  document.getElementById('sendLoginPreview').value=msg;
+  document.getElementById('sendLoginName').textContent=t.name;
+  document.getElementById('sendLoginPhone').value=t.phone||'';
+  openModal('sendLoginModal');
+}
+
+function sendLoginViaWhatsApp(){
+  if(!sendLoginCtx)return;
+  const phone=(document.getElementById('sendLoginPhone').value||'').replace(/[^0-9]/g,'');
+  if(!phone){showToast('Enter a valid phone number','error');return;}
+  const msg=document.getElementById('sendLoginPreview').value;
+  const fullPhone=phone.length===10?'91'+phone:phone; // assume India if 10 digits
+  const url='https://wa.me/'+fullPhone+'?text='+encodeURIComponent(msg);
+  window.open(url,'_blank');
+  closeModal('sendLoginModal');
+}
+
+function copyLoginDetails(){
+  const msg=document.getElementById('sendLoginPreview').value;
+  navigator.clipboard.writeText(msg).then(()=>{
+    showToast('Login details copied to clipboard ✅','success');
+  }).catch(()=>{
+    // fallback for older browsers
+    const ta=document.getElementById('sendLoginPreview');
+    ta.select();document.execCommand('copy');
+    showToast('Login details copied ✅','success');
+  });
+}
+
+function sendLoginViaSMS(){
+  if(!sendLoginCtx)return;
+  const phone=(document.getElementById('sendLoginPhone').value||'').replace(/[^0-9]/g,'');
+  if(!phone){showToast('Enter a valid phone number','error');return;}
+  const msg=document.getElementById('sendLoginPreview').value;
+  window.location.href='sms:'+phone+'?body='+encodeURIComponent(msg);
+}
+
+function sendLoginViaEmail(){
+  if(!sendLoginCtx)return;
+  const msg=document.getElementById('sendLoginPreview').value;
+  const subject=encodeURIComponent('Your Toddler\'s Castle Login Details');
+  const body=encodeURIComponent(msg);
+  const email=sendLoginCtx.email||'';
+  window.location.href='mailto:'+email+'?subject='+subject+'&body='+body;
 }
 
 // ═══════════════════════════════
@@ -2518,7 +2626,7 @@ function renderExpenses(){
     <td>${e.paidby||'–'}</td>
     <td class="td-act">
       <button class="btn btn-xs btn-ghost" onclick="editExp(${e.id})">✏️</button>
-      <button class="btn btn-xs btn-danger" onclick="deleteExp(${e.id})">🗑️</button>
+      ${isAdmin()?`<button class="btn btn-xs btn-danger" onclick="deleteExp(${e.id})">🗑️</button>`:''}
     </td>
   </tr>`).join('');
 }
@@ -2562,6 +2670,7 @@ function editExp(id){
 }
 
 function deleteExp(id){
+  if(adminOnlyGuard())return;
   if(!confirm('Delete this expense?'))return;
   DB.set('expenses',(DB.get('expenses')||[]).filter(e=>e.id!==id));
   renderExpenses();renderExpSummary();showToast('Expense deleted','info');
@@ -2784,6 +2893,7 @@ function confirmBk(){
 }
 
 function clearAll(){
+  if(adminOnlyGuard())return;
   const confirm1=prompt('⚠️ WARNING: This will DELETE ALL school data from Firebase.\n\nType DELETE to confirm (cannot be undone):');
   if(confirm1!=='DELETE'){showToast('Cancelled — type DELETE exactly to proceed','info');return;}
   const confirm2=prompt('Are you ABSOLUTELY sure? Type YES to confirm:');
@@ -2796,11 +2906,13 @@ function clearAll(){
 //  SETTINGS
 // ═══════════════════════════════
 function renderUsers(){
+  const addBtn=document.querySelector('#panel-settings .btn-primary');
+  if(addBtn) addBtn.style.display=isAdmin()?'':'none';
   document.getElementById('usersTable').innerHTML=(DB.get('users')||[]).map((u,i)=>`<tr>
     <td>${i+1}</td><td><strong>${u.name}</strong></td><td>${u.username}</td>
     <td><span class="badge ${u.role==='admin'?'b-orange':u.role==='principal'?'b-gold':'b-blue'}">${u.role}</span></td>
     <td><span class="badge ${u.status==='Active'?'b-green':'b-red'}">${u.status}</span></td>
-    <td><button class="btn btn-xs btn-danger" onclick="deleteUser(${u.id})">🗑️</button></td>
+    <td>${isAdmin()?`<button class="btn btn-xs btn-danger" onclick="deleteUser(${u.id})">🗑️</button>`:'<span style="font-size:0.72rem;color:var(--text3)">–</span>'}</td>
   </tr>`).join('');
 }
 
@@ -2817,6 +2929,7 @@ function saveUser(){
 }
 
 function deleteUser(id){
+  if(adminOnlyGuard())return;
   if(CU?.id===id){showToast("Can't delete your own account",'error');return;}
   if(!confirm('Delete this user?'))return;
   DB.set('users',(DB.get('users')||[]).filter(u=>u.id!==id));
