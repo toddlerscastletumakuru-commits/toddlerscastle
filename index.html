@@ -1182,34 +1182,62 @@ tbody td strong{color:var(--text);font-weight:700;}
       <!-- ── MERIT POINTS ── -->
       <div class="panel" id="panel-merit">
         <div class="sec-hd">
-          <div class="sec-title">🏅 Teacher Merit Points</div>
+          <div class="sec-title">🏅 Teacher Merit &amp; EOD Reports</div>
           <div class="sec-actions">
-            <input type="date" id="meritWeekPick" class="f-sel" style="width:auto" onchange="renderMerit()">
+            <input type="date" id="meritWeekPick" class="f-sel" style="width:auto" onchange="renderMerit();renderEODReports();">
             <span id="meritWeekLabel" style="font-size:0.82rem;font-weight:700;color:var(--text2);align-self:center;background:var(--bg3);padding:0.4rem 0.8rem;border-radius:8px;"></span>
           </div>
         </div>
 
-        <!-- Rules banner -->
-        <div style="background:linear-gradient(135deg,rgba(139,92,246,0.08),rgba(59,130,246,0.06));border:1.5px solid rgba(139,92,246,0.2);border-radius:12px;padding:0.9rem 1.2rem;margin-bottom:1.2rem;font-size:0.82rem;color:var(--text2);line-height:1.8;">
-          <strong>📋 Point Deduction Rules:</strong><br>
-          <span id="meritRulesText"></span>
+        <div class="pill-tabs">
+          <button class="pill-tab active" id="mtab-points" onclick="switchMeritTab('points')">🏅 Merit Points</button>
+          <button class="pill-tab" id="mtab-eod" onclick="switchMeritTab('eod')">📝 EOD Reports</button>
         </div>
 
-        <!-- ADMIN / PRINCIPAL VIEW -->
-        <div id="meritAdminView" style="display:none;">
-          <div class="card"><div class="tbl-wrap">
-            <table>
-              <thead><tr>
-                <th>Teacher</th><th>Class</th><th>⏰ Late Login</th><th>📋 Missing Attendance</th><th>📝 Missing EOD</th><th>Total Deducted</th><th></th>
-              </tr></thead>
-              <tbody id="meritTableBody"></tbody>
-            </table>
-          </div></div>
-          <div id="meritDetailArea" style="margin-top:1.2rem;"></div>
+        <!-- ═══ MERIT POINTS TAB ═══ -->
+        <div id="merit-tab-points">
+          <!-- Rules banner -->
+          <div style="background:linear-gradient(135deg,rgba(139,92,246,0.08),rgba(59,130,246,0.06));border:1.5px solid rgba(139,92,246,0.2);border-radius:12px;padding:0.9rem 1.2rem;margin-bottom:1.2rem;font-size:0.82rem;color:var(--text2);line-height:1.8;">
+            <strong>📋 Point Deduction Rules:</strong><br>
+            <span id="meritRulesText"></span>
+          </div>
+
+          <!-- ADMIN / PRINCIPAL VIEW -->
+          <div id="meritAdminView" style="display:none;">
+            <div class="card"><div class="tbl-wrap">
+              <table>
+                <thead><tr>
+                  <th>Teacher</th><th>Class</th><th>⏰ Late Login</th><th>📋 Missing Attendance</th><th>📝 Missing EOD</th><th>Total Deducted</th><th></th>
+                </tr></thead>
+                <tbody id="meritTableBody"></tbody>
+              </table>
+            </div></div>
+            <div id="meritDetailArea" style="margin-top:1.2rem;"></div>
+          </div>
+
+          <!-- TEACHER'S OWN VIEW -->
+          <div id="meritMyView" style="display:none;"></div>
         </div>
 
-        <!-- TEACHER'S OWN VIEW -->
-        <div id="meritMyView" style="display:none;"></div>
+        <!-- ═══ EOD REPORTS TAB ═══ -->
+        <div id="merit-tab-eod" style="display:none;">
+          <div style="background:var(--blue-lt);border:1.5px solid rgba(59,130,246,0.2);border-radius:12px;padding:0.9rem 1.2rem;margin-bottom:1.2rem;font-size:0.82rem;color:var(--text2);">
+            📝 What each teacher reported doing at the end of their day this week. Missing entries mean they skipped the report (and lost merit points for it).
+          </div>
+
+          <!-- ADMIN / PRINCIPAL VIEW: everyone's reports -->
+          <div id="eodAdminView" style="display:none;">
+            <div style="margin-bottom:1rem;">
+              <select class="f-sel" id="eodTeacherFilter" style="width:auto" onchange="renderEODReports()">
+                <option value="">All Teachers</option>
+              </select>
+            </div>
+            <div id="eodListArea"></div>
+          </div>
+
+          <!-- TEACHER'S OWN VIEW: their own report history -->
+          <div id="eodMyView" style="display:none;"></div>
+        </div>
       </div>
 
       <!-- ── BACKUP ── -->
@@ -1941,7 +1969,7 @@ function showPanel(id){
     satt:renderSAtt,
     tatt:()=>{renderTAtt();populateTAttHistTeachers();},
     qrstation:renderQRStation,
-    merit:renderMerit,
+    merit:()=>{renderMerit();renderEODReports();},
     fees:()=>{populateFeeStudents();renderFees();renderFeeSummary();},
     expenses:()=>{renderExpenses();renderExpSummary();},
     reports:()=>renderRepAtt(),
@@ -2774,6 +2802,14 @@ function getWeekRange(dateStr){
 function fmtDateShort(d){return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});}
 
 // ─── Main Merit Points panel render ───
+function switchMeritTab(tab){
+  document.getElementById('merit-tab-points').style.display=tab==='points'?'':'none';
+  document.getElementById('merit-tab-eod').style.display=tab==='eod'?'':'none';
+  document.getElementById('mtab-points').classList.toggle('active',tab==='points');
+  document.getElementById('mtab-eod').classList.toggle('active',tab==='eod');
+  if(tab==='eod') renderEODReports();
+}
+
 function renderMerit(){
   const rulesEl=document.getElementById('meritRulesText');
   if(rulesEl) rulesEl.innerHTML=meritRulesText();
@@ -2906,6 +2942,102 @@ function saveMeritFeedback(tid,weekStart){
   else fbs.push({id:Date.now(),tid,weekStart,text,by:CU.name,date:new Date().toISOString().slice(0,10)});
   DB.set('meritFeedback',fbs);
   showToast('Feedback saved ✅','success');
+}
+
+// ─── EOD Reports Viewer ───
+function renderEODReports(){
+  const isTeacherViewer=CU&&CU.role==='teacher';
+  const adminView=document.getElementById('eodAdminView');
+  const myView=document.getElementById('eodMyView');
+  if(!adminView||!myView) return; // panel not yet rendered
+
+  const wkInput=document.getElementById('meritWeekPick');
+  if(wkInput&&!wkInput.value) wkInput.value=new Date().toISOString().slice(0,10);
+  const {start,end}=getWeekRange(wkInput?wkInput.value:null);
+  const startStr=start.toISOString().slice(0,10),endStr=end.toISOString().slice(0,10);
+
+  const allReports=(DB.get('eodReports')||[]).filter(r=>r.date>=startStr&&r.date<=endStr);
+
+  if(isTeacherViewer){
+    adminView.style.display='none';
+    myView.style.display='block';
+    const me=getMyTeacherRecord();
+    if(!me){myView.innerHTML='<div class="empty"><div class="ei">📝</div><p>Staff record not found.</p></div>';return;}
+    const mine=allReports.filter(r=>r.tid===me.id).sort((a,b)=>b.date.localeCompare(a.date));
+    if(!mine.length){
+      myView.innerHTML='<div class="empty"><div class="ei">📝</div><p>You haven\'t submitted any EOD reports this week yet.</p></div>';
+      return;
+    }
+    myView.innerHTML=mine.map(r=>`
+      <div class="card" style="padding:1.1rem 1.3rem;margin-bottom:0.8rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+          <span style="font-weight:800;color:var(--primary);font-size:0.88rem;">📅 ${r.date}</span>
+          <span style="font-size:0.72rem;color:var(--text3);">${new Date(r.ts).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true})}</span>
+        </div>
+        <div style="font-size:0.86rem;color:var(--text2);line-height:1.7;white-space:pre-wrap;">${r.summary}</div>
+      </div>`).join('');
+  } else {
+    myView.style.display='none';
+    adminView.style.display='block';
+
+    // Populate teacher filter dropdown once
+    const filterSel=document.getElementById('eodTeacherFilter');
+    if(filterSel && filterSel.options.length<=1){
+      const teachers=(DB.get('teachers')||[]).filter(t=>t.status==='Active');
+      filterSel.innerHTML='<option value="">All Teachers</option>'+teachers.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+    }
+    const filterVal=filterSel?filterSel.value:'';
+    let reports=allReports.slice();
+    if(filterVal) reports=reports.filter(r=>String(r.tid)===String(filterVal));
+    reports.sort((a,b)=>b.date.localeCompare(a.date)||a.name.localeCompare(b.name));
+
+    const listArea=document.getElementById('eodListArea');
+
+    // Also show which active teachers are MISSING a report for each day this week (up to today)
+    const teachers=(DB.get('teachers')||[]).filter(t=>t.status==='Active'&&(!filterVal||String(t.id)===String(filterVal)));
+    const today=new Date().toISOString().slice(0,10);
+    const missingList=[];
+    teachers.forEach(t=>{
+      // Only flag days that have already passed (or today) within this week
+      let d=new Date(startStr+'T00:00:00');
+      const endLimit=today<endStr?today:endStr;
+      while(d.toISOString().slice(0,10)<=endLimit){
+        const dStr=d.toISOString().slice(0,10);
+        const hasReport=allReports.some(r=>r.tid===t.id&&r.date===dStr);
+        const clockedOut=(DB.get('tSessions')||[]).some(s=>s.tid===t.id&&s.date===dStr&&s.type==='out');
+        if(clockedOut&&!hasReport) missingList.push({name:t.name,date:dStr});
+        d.setDate(d.getDate()+1);
+      }
+    });
+
+    let html='';
+    if(missingList.length){
+      html+=`<div style="background:#FEF2F2;border:1.5px solid #FCA5A5;border-radius:12px;padding:0.9rem 1.2rem;margin-bottom:1.2rem;">
+        <div style="font-weight:800;color:#DC2626;font-size:0.85rem;margin-bottom:0.5rem;">⚠️ Missing Reports (${missingList.length})</div>
+        <div style="font-size:0.78rem;color:#991B1B;">${missingList.map(m=>`${m.name} — ${m.date}`).join(' &nbsp;•&nbsp; ')}</div>
+      </div>`;
+    }
+
+    if(!reports.length){
+      html+='<div class="empty"><div class="ei">📝</div><p>No EOD reports submitted for this week yet.</p></div>';
+    } else {
+      html+=reports.map(r=>`
+        <div class="card" style="padding:1.1rem 1.3rem;margin-bottom:0.8rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+            <div>
+              <span style="font-weight:800;color:var(--text);font-size:0.9rem;">${r.name}</span>
+              <span style="font-size:0.72rem;color:var(--text3);margin-left:0.5rem;">${r.sid||''}</span>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-weight:700;color:var(--primary);font-size:0.8rem;">📅 ${r.date}</div>
+              <div style="font-size:0.7rem;color:var(--text3);">${new Date(r.ts).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true})}</div>
+            </div>
+          </div>
+          <div style="font-size:0.85rem;color:var(--text2);line-height:1.7;white-space:pre-wrap;background:var(--bg3);border-radius:8px;padding:0.7rem 0.9rem;">${r.summary}</div>
+        </div>`).join('');
+    }
+    listArea.innerHTML=html;
+  }
 }
 
 function saveTAtt(){
