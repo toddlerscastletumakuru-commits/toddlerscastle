@@ -1779,12 +1779,21 @@ const FB_PATH = 'tc'; // root path in Firebase
 
 // In-memory cache — all reads are instant from here
 let CACHE = {};
+let OFFLINE_MODE = false; // true only when boot couldn't confirm real Firebase data — blocks all writes to Firebase
 
 const DB = {
   get: k => (CACHE[k] !== undefined ? CACHE[k] : null),
   set: (k, v) => {
     CACHE[k] = v;
     lsSave(k, v); // auto-backup to localStorage FIRST (safe)
+    if(OFFLINE_MODE){
+      // Never push to Firebase when we couldn't confirm the real server state —
+      // this is exactly what previously caused empty/stale data to overwrite
+      // everyone else's real records. Local session still works; nothing syncs
+      // until the person reloads with a working connection.
+      console.warn('[TC] Offline mode — NOT writing', k, 'to Firebase (local only)');
+      return;
+    }
     fbDB.ref(FB_PATH + '/' + k).set(v)
       .catch(e => {
         console.warn('[TC] Firebase write failed for', k, ':', e.code||e.message);
@@ -1812,7 +1821,7 @@ function setLoadingMsg(msg){ const el=document.getElementById('loadingMsg'); if(
 async function loadFromFirebase(){
   setLoadingMsg('Connecting to Firebase...');
   return new Promise((resolve, reject) => {
-    const timer=setTimeout(()=>reject(new Error('timeout')), 8000);
+    const timer=setTimeout(()=>reject(new Error('timeout')), 20000);
     fbDB.ref(FB_PATH).once('value', snap => {
       clearTimeout(timer);
       const data = snap.val() || {};
@@ -4405,10 +4414,13 @@ function showFirebaseWarning(){
   } catch(err){
     console.error('[TC] Boot error:', err.code||err.message);
     const isTimeout=err.message==='timeout'||err.code==='ETIMEDOUT';
+    OFFLINE_MODE=true; // CRITICAL: block all Firebase writes for the rest of this session —
+                        // we could not confirm the real server state, so nothing from this
+                        // session should ever overwrite the actual cloud data.
 
     // ── Try to recover from localStorage auto-backup ──
     if(lsHasData()){
-      console.log('[TC] Firebase failed — loading from localStorage backup');
+      console.log('[TC] Firebase failed — loading from localStorage backup (read-only, offline mode)');
       BK_KEYS.forEach(k=>{const v=lsLoad(k);if(v!==null)CACHE[k]=v;});
       initDB();
       document.getElementById('loadingScreen').style.display='none';
@@ -4423,8 +4435,7 @@ function showFirebaseWarning(){
       setTimeout(()=>{
         const d=document.createElement('div');
         d.style.cssText='position:fixed;top:0;left:0;right:0;z-index:950;background:#FEF2F2;border-bottom:2px solid #FCA5A5;padding:0.8rem 1.4rem;text-align:center;font-size:0.82rem;color:#DC2626;display:flex;align-items:center;justify-content:center;gap:1rem;flex-wrap:wrap;';
-        d.innerHTML='⚠️ <strong>Firebase offline — using local backup.</strong> Data is safe but not syncing to cloud. '
-          +'Fix Firebase Rules (Console → Realtime Database → Rules → set <b>.read</b> & <b>.write</b> to <b>true</b>), then '
+        d.innerHTML='⚠️ <strong>Offline mode — showing this device\'s last saved copy.</strong> Nothing you do now will sync to the cloud until you reload with a working connection. '
           +'<button onclick="location.reload()" style="background:#DC2626;color:white;border:none;border-radius:6px;padding:0.25rem 0.7rem;cursor:pointer;font-weight:700;">Reload</button>'
           +'<button onclick="this.closest(\'div\').remove()" style="background:transparent;color:#DC2626;border:1px solid #DC2626;border-radius:6px;padding:0.25rem 0.7rem;cursor:pointer;margin-left:0.3rem;">Dismiss</button>';
         document.body.appendChild(d);
