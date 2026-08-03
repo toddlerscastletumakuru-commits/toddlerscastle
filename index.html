@@ -1186,6 +1186,7 @@ tbody td strong{color:var(--text);font-weight:700;}
         <div class="sec-hd">
           <div class="sec-title">🏅 Teacher Merit Points</div>
           <div class="sec-actions">
+            <button class="btn btn-primary" id="btnManualMerit" style="display:none;" onclick="openManualMeritModal()">✍️ Add Manual Entry</button>
             <input type="date" id="meritWeekPick" class="f-sel" style="width:auto" onchange="renderMerit();renderEODReports();">
             <span id="meritWeekLabel" style="font-size:0.82rem;font-weight:700;color:var(--text2);align-self:center;background:var(--bg3);padding:0.4rem 0.8rem;border-radius:8px;"></span>
           </div>
@@ -1543,6 +1544,73 @@ tbody td strong{color:var(--text);font-weight:700;}
     </div>
     <div class="modal-ft">
       <button class="btn btn-ghost" onclick="closeModal('sendLoginModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- WHATSAPP PARENT MODAL -->
+<div class="modal-ov" id="waParentModal">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-hd"><div class="modal-title">💬 Message Parent</div><button class="modal-x" onclick="closeModal('waParentModal')">✕</button></div>
+    <div class="modal-bd">
+      <div style="background:var(--primary-lt);border-radius:10px;padding:0.7rem 1rem;margin-bottom:1rem;font-size:0.85rem;color:var(--text2);">
+        Student: <strong id="waStuName" style="color:var(--primary)"></strong> · Parent: <strong id="waParentName"></strong>
+      </div>
+      <div class="f-row full">
+        <label class="f-lbl">Quick Templates</label>
+        <select class="f-sel" id="waTemplate" onchange="applyWaTemplate()">
+          <option value="">-- Choose a template or write your own --</option>
+          <option value="fee">💰 Fee Payment Reminder</option>
+          <option value="absent">📋 Student Absent Today</option>
+          <option value="general">📢 General Update</option>
+          <option value="event">🎉 Event / Holiday Notice</option>
+          <option value="progress">🌟 Progress Update</option>
+        </select>
+      </div>
+      <div class="f-row full">
+        <label class="f-lbl">Phone Number</label>
+        <input class="f-in" id="waParentPhone" type="tel" placeholder="10-digit mobile number">
+      </div>
+      <div class="f-row full">
+        <label class="f-lbl">Message</label>
+        <textarea class="f-in" id="waParentPreview" rows="7" style="font-size:0.85rem;"></textarea>
+      </div>
+      <button class="btn btn-green" style="width:100%;justify-content:center;margin-top:0.5rem;" onclick="sendWaToParent()">💬 Open in WhatsApp</button>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="closeModal('waParentModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- MANUAL MERIT ENTRY MODAL (Admin only) -->
+<div class="modal-ov" id="manualMeritModal">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-hd"><div class="modal-title">✍️ Add Manual Merit Entry</div><button class="modal-x" onclick="closeModal('manualMeritModal')">✕</button></div>
+    <div class="modal-bd">
+      <div style="background:var(--purple-lt);border-radius:10px;padding:0.7rem 1rem;margin-bottom:1rem;font-size:0.8rem;color:var(--text2);">
+        ✍️ Use this to give a bonus for great work, or apply an extra deduction for something not covered by the automatic rules.
+      </div>
+      <div class="f-row full">
+        <label class="f-lbl">Teacher <span class="req">*</span></label>
+        <select class="f-sel" id="mm_teacher"></select>
+      </div>
+      <div class="f-grid">
+        <div class="f-row"><label class="f-lbl">Date <span class="req">*</span></label><input class="f-in" type="date" id="mm_date"></div>
+        <div class="f-row">
+          <label class="f-lbl">Type <span class="req">*</span></label>
+          <select class="f-sel" id="mm_type">
+            <option value="deduction">➖ Deduction</option>
+            <option value="bonus">➕ Bonus</option>
+          </select>
+        </div>
+      </div>
+      <div class="f-row full"><label class="f-lbl">Points <span class="req">*</span></label><input class="f-in" type="number" id="mm_points" min="0.5" step="0.5" placeholder="e.g. 2"></div>
+      <div class="f-row full"><label class="f-lbl">Reason <span class="req">*</span></label><textarea class="f-in" id="mm_reason" rows="3" placeholder="e.g. Went above and beyond helping with the annual day event"></textarea></div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="closeModal('manualMeritModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveManualMeritEntry()">💾 Save Entry</button>
     </div>
   </div>
 </div>
@@ -2433,6 +2501,7 @@ function renderStudents(){
       <td><span class="badge ${s.status==='Active'?'b-green':s.status==='Left'?'b-red':'b-gray'}">${s.status}</span></td>
       <td class="td-act">
         <button class="btn btn-xs btn-ghost" onclick="openStudentModal(${s.id})">✏️</button>
+        <button class="btn btn-xs btn-green" onclick="openWhatsAppModal(${s.id})" title="Message Parent on WhatsApp">💬</button>
         ${isAdmin()?`<button class="btn btn-xs btn-danger" onclick="deleteStu(${s.id})">🗑️</button>`:''}
       </td>
     </tr>`;
@@ -2596,6 +2665,50 @@ function sendLoginViaWhatsApp(){
   closeModal('sendLoginModal');
 }
 
+// ═══════════════════════════════
+//  WHATSAPP TO PARENT
+// ═══════════════════════════════
+let waParentCtx=null;
+
+function openWhatsAppModal(studentId){
+  const s=(DB.get('students')||[]).find(x=>x.id===studentId);
+  if(!s){showToast('Student not found','error');return;}
+  waParentCtx=s;
+  document.getElementById('waStuName').textContent=s.name;
+  document.getElementById('waParentName').textContent=s.parent||'Parent';
+  document.getElementById('waParentPhone').value=s.phone||'';
+  document.getElementById('waTemplate').value='';
+  document.getElementById('waParentPreview').value='';
+  openModal('waParentModal');
+}
+
+function applyWaTemplate(){
+  const s=waParentCtx;
+  if(!s)return;
+  const tpl=document.getElementById('waTemplate').value;
+  const today=new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
+  const balance=(s.fee||0)-(s.paidFee||0);
+  const templates={
+    fee:`🏰 *Toddler's Castle Pre-School*\n\nDear ${s.parent},\n\nThis is a gentle reminder that the fee for *${s.name}* (${s.class}) has a pending balance of ₹${fmtN(balance)}.\n\nKindly clear the payment at your earliest convenience. Feel free to contact the school office for any queries.\n\nThank you! 🙏`,
+    absent:`🏰 *Toddler's Castle Pre-School*\n\nDear ${s.parent},\n\nWe noticed *${s.name}* (${s.class}) is absent from school today, ${today}. We hope everything is okay.\n\nPlease let us know the reason for absence at your convenience. 🙏`,
+    general:`🏰 *Toddler's Castle Pre-School*\n\nDear ${s.parent},\n\nThis is a quick update regarding *${s.name}* (${s.class}).\n\n[Write your message here]\n\nThank you!`,
+    event:`🏰 *Toddler's Castle Pre-School*\n\nDear ${s.parent},\n\nWe would like to inform you about an upcoming event/holiday at school. Details:\n\n[Add event/holiday details here]\n\nWe look forward to your child's participation! 🎉`,
+    progress:`🏰 *Toddler's Castle Pre-School*\n\nDear ${s.parent},\n\nWe're happy to share that *${s.name}* (${s.class}) is doing wonderfully in class! 🌟\n\n[Add specific progress notes here]\n\nKeep up the great work at home too!`,
+  };
+  document.getElementById('waParentPreview').value=templates[tpl]||'';
+}
+
+function sendWaToParent(){
+  const phone=(document.getElementById('waParentPhone').value||'').replace(/[^0-9]/g,'');
+  if(!phone){showToast('Enter a valid phone number','error');return;}
+  const msg=document.getElementById('waParentPreview').value.trim();
+  if(!msg){showToast('Write a message or choose a template first','error');return;}
+  const fullPhone=phone.length===10?'91'+phone:phone;
+  const url='https://wa.me/'+fullPhone+'?text='+encodeURIComponent(msg);
+  window.open(url,'_blank');
+  closeModal('waParentModal');
+}
+
 function copyLoginDetails(){
   const msg=document.getElementById('sendLoginPreview').value;
   navigator.clipboard.writeText(msg).then(()=>{
@@ -2692,13 +2805,15 @@ function renderTAtt(){
   const teachers=(DB.get('teachers')||[]).filter(t=>t.status==='Active');
   const existing=(DB.get('tAtt')||[]).filter(a=>a.date===date);
   tAS={};existing.forEach(a=>tAS[a.tid]=a.status);
+  const srcMap={};existing.forEach(a=>srcMap[a.tid]=a.source);
   const grid=document.getElementById('tAttGrid');
   if(!teachers.length){grid.innerHTML='<div class="empty"><div class="ei">👩‍🏫</div><p>No active teachers.</p></div>';return;}
   grid.innerHTML=teachers.map(t=>{
     const cur=tAS[t.id]||'';
+    const qrBadge=srcMap[t.id]==='qr'?'<span style="background:var(--blue-lt);color:var(--blue);font-size:0.62rem;font-weight:800;padding:0.1rem 0.4rem;border-radius:5px;margin-left:0.4rem;">📡 QR</span>':'';
     return `<div class="att-card${cur?' '+cur.toLowerCase().replace(' ','-'):''}" id="tacard-${t.id}">
       <div class="att-pers"><div class="att-av">👩‍🏫</div>
-        <div><div class="att-name">${t.name}</div><div class="att-sub">${t.desig}·${t.class}</div></div>
+        <div><div class="att-name">${t.name}${qrBadge}</div><div class="att-sub">${t.desig}·${t.class}</div></div>
       </div>
       <div class="att-btns">
         <button class="att-btn${cur==='Present'?' p-sel':''}" onclick="markTA(${t.id},'Present')" title="Present">✅</button>
@@ -2790,6 +2905,86 @@ async function logMeritDeduction(tid,name,sid,dateStr,category,points,reason){
   DB.set('meritPoints',list);
 }
 
+// Signed effect of a merit entry on the total: deductions subtract, bonuses add.
+// Older/automatic entries have no "type" field and are always deductions (backward-compatible).
+function meritNetEffect(m){
+  return m.type==='bonus' ? m.points : -m.points;
+}
+
+// ═══════════════════════════════
+//  MANUAL MERIT ENTRY (Admin only)
+// ═══════════════════════════════
+function openManualMeritModal(){
+  if(!isAdmin()){showToast('Only Admin can add manual merit entries','error');return;}
+  const sel=document.getElementById('mm_teacher');
+  const teachers=(DB.get('teachers')||[]).filter(t=>t.status==='Active');
+  sel.innerHTML='<option value="">-- Select Teacher --</option>'+teachers.map(t=>`<option value="${t.id}">${t.name} (${t.sid||''})</option>`).join('');
+  document.getElementById('mm_date').value=new Date().toISOString().slice(0,10);
+  document.getElementById('mm_type').value='deduction';
+  document.getElementById('mm_points').value='';
+  document.getElementById('mm_reason').value='';
+  openModal('manualMeritModal');
+}
+
+async function saveManualMeritEntry(){
+  if(!isAdmin()){showToast('Only Admin can add manual merit entries','error');return;}
+  const tid=parseInt(document.getElementById('mm_teacher').value);
+  const date=document.getElementById('mm_date').value;
+  const type=document.getElementById('mm_type').value; // 'deduction' or 'bonus'
+  const points=parseFloat(document.getElementById('mm_points').value);
+  const reason=document.getElementById('mm_reason').value.trim();
+  if(!tid){showToast('Select a teacher','error');return;}
+  if(!date){showToast('Select a date','error');return;}
+  if(!points||points<=0){showToast('Enter a positive point value','error');return;}
+  if(!reason){showToast('Please add a reason','error');return;}
+
+  const t=(DB.get('teachers')||[]).find(x=>x.id===tid);
+  const list=await getFreshCollection('meritPoints');
+  list.push({
+    id:Date.now()+Math.floor(Math.random()*1000),
+    tid,name:t?.name||'',sid:t?.sid||'',date,
+    category:'manual',type,points,
+    reason:`${reason} (added by ${CU.name})`,
+    ts:new Date().toISOString(),
+  });
+  DB.set('meritPoints',list);
+  closeModal('manualMeritModal');
+  renderMerit();
+  showToast(`${type==='bonus'?'Bonus':'Deduction'} of ${points} points added ✅`,'success');
+}
+
+async function deleteManualMeritEntry(entryId,tid,weekStart){
+  if(!isAdmin()){showToast('Only Admin can remove manual entries','error');return;}
+  if(!confirm('Remove this manual merit entry?'))return;
+  const list=await getFreshCollection('meritPoints');
+  const filtered=list.filter(m=>m.id!==entryId);
+  DB.set('meritPoints',filtered);
+  renderMerit();
+  toggleMeritDetail(tid,weekStart); // reopen with fresh data
+  toggleMeritDetail(tid,weekStart);
+  showToast('Manual entry removed','info');
+}
+
+// Makes the QR scan the single source of truth for teacher attendance —
+// as soon as a teacher clocks IN, their attendance status for that day is
+// set automatically (Present or Late based on scan time). No manual marking
+// needed, and this is what the Merit Points / attendance history reflect.
+// If admin has already manually marked something else for this date (e.g. a
+// pre-approved Half Day), that manual entry is preserved and NOT overwritten.
+async function autoMarkTAttFromQR(tid,name,desig,dateStr,status){
+  const att=await getFreshCollection('tAtt');
+  const idx=att.findIndex(a=>a.tid===tid&&a.date===dateStr);
+  if(idx>=0){
+    // Only overwrite if the existing entry wasn't a manual Half Day / Absent override
+    if(att[idx].status==='Half Day'||att[idx].status==='Absent') return;
+    att[idx].status=status;
+    att[idx].source='qr';
+  } else {
+    att.push({tid,name,desig:desig||'',date:dateStr,status,source:'qr'});
+  }
+  DB.set('tAtt',att);
+}
+
 // Called right after a teacher clocks IN via QR
 async function checkLateLoginMerit(teacherId,name,sid,dateStr,clockInDate){
   const s=getMeritSettings();
@@ -2856,6 +3051,8 @@ function fmtDateShort(d){return d.toLocaleDateString('en-IN',{day:'2-digit',mont
 function renderMerit(){
   const rulesEl=document.getElementById('meritRulesText');
   if(rulesEl) rulesEl.innerHTML=meritRulesText();
+  const manualBtn=document.getElementById('btnManualMerit');
+  if(manualBtn) manualBtn.style.display=isAdmin()?'':'none';
 
   const isTeacherViewer=CU&&CU.role==='teacher';
   const adminView=document.getElementById('meritAdminView');
@@ -2870,8 +3067,8 @@ function renderMerit(){
 
   const merits=(DB.get('meritPoints')||[]).filter(m=>m.date>=startStr&&m.date<=endStr);
   const feedbacks=DB.get('meritFeedback')||[];
-  const catIcon={late_login:'⏰',missing_attendance:'📋',missing_eod:'📝',early_clockout:'🚪',absent_full:'🏖️',absent_half:'🌗'};
-  const catLabel={late_login:'Late Login',missing_attendance:'Missing Attendance',missing_eod:'Missing EOD',early_clockout:'Early Clock-Out',absent_full:'Full Day Absence',absent_half:'Half Day Absence'};
+  const catIcon={late_login:'⏰',missing_attendance:'📋',missing_eod:'📝',early_clockout:'🚪',absent_full:'🏖️',absent_half:'🌗',manual:'✍️'};
+  const catLabel={late_login:'Late Login',missing_attendance:'Missing Attendance',missing_eod:'Missing EOD',early_clockout:'Early Clock-Out',absent_full:'Full Day Absence',absent_half:'Half Day Absence',manual:'Manual Entry'};
 
   if(isTeacherViewer){
     adminView.style.display='none';
@@ -2879,26 +3076,28 @@ function renderMerit(){
     const me=getMyTeacherRecord();
     if(!me){myView.innerHTML='<div class="empty"><div class="ei">🏅</div><p>Staff record not found. Contact admin.</p></div>';return;}
     const mine=merits.filter(m=>m.tid===me.id).sort((a,b)=>b.date.localeCompare(a.date));
-    const total=mine.reduce((s,m)=>s+m.points,0);
+    const netChange=mine.reduce((s,m)=>s+meritNetEffect(m),0); // positive = net bonus, negative = net loss
     const fb=feedbacks.find(f=>f.tid===me.id&&f.weekStart===startStr);
-    const statusColor=total===0?'var(--green)':total<=3?'var(--gold)':'var(--red)';
-    const statusBg=total===0?'var(--green-lt)':total<=3?'var(--gold-lt)':'var(--red-lt)';
-    const statusLabel=total===0?'✅ Perfect Week!':total<=3?'⚠️ Room to Improve':'🔴 Needs Attention';
+    const statusColor=netChange>=0?'var(--green)':netChange>=-3?'var(--gold)':'var(--red)';
+    const statusBg=netChange>=0?'var(--green-lt)':netChange>=-3?'var(--gold-lt)':'var(--red-lt)';
+    const statusLabel=netChange>0?'🌟 Bonus Week!':netChange===0?'✅ Perfect Week!':netChange>=-3?'⚠️ Room to Improve':'🔴 Needs Attention';
+    const displayTotal=(netChange>=0?'+':'')+netChange;
 
     let html=`<div style="background:white;border-radius:20px;box-shadow:var(--shadow);overflow:hidden;max-width:560px;">
       <div style="padding:1.8rem;text-align:center;background:${statusBg};">
-        <div style="font-family:'Fredoka One',cursive;font-size:2.6rem;color:${statusColor};">-${total}<span style="font-size:1.1rem"> pts</span></div>
+        <div style="font-family:'Fredoka One',cursive;font-size:2.6rem;color:${statusColor};">${displayTotal}<span style="font-size:1.1rem"> pts</span></div>
         <div style="font-family:'Fredoka One',cursive;font-size:1.1rem;color:${statusColor};margin-top:0.3rem;">${statusLabel}</div>
       </div>
       <div style="padding:1.4rem 1.6rem;">`;
     if(!mine.length){
-      html+=`<div style="text-align:center;color:var(--text3);padding:1rem;">No deductions this week 🎉</div>`;
+      html+=`<div style="text-align:center;color:var(--text3);padding:1rem;">No entries this week 🎉</div>`;
     } else {
       mine.forEach(m=>{
+        const isBonus=m.type==='bonus';
         html+=`<div style="display:flex;gap:0.7rem;align-items:flex-start;padding:0.7rem 0;border-bottom:1px solid var(--border);">
           <div style="font-size:1.2rem;">${catIcon[m.category]||'⚠️'}</div>
           <div style="flex:1;">
-            <div style="font-size:0.85rem;font-weight:700;color:var(--text);">${catLabel[m.category]||m.category} <span style="color:var(--red);font-weight:800;">-${m.points}</span></div>
+            <div style="font-size:0.85rem;font-weight:700;color:var(--text);">${catLabel[m.category]||m.category} <span style="color:${isBonus?'var(--green)':'var(--red)'};font-weight:800;">${isBonus?'+':'-'}${m.points}</span></div>
             <div style="font-size:0.76rem;color:var(--text3);margin-top:1px;">${m.reason}</div>
             <div style="font-size:0.7rem;color:var(--text3);margin-top:2px;">📅 ${m.date}</div>
           </div>
@@ -2921,8 +3120,9 @@ function renderMerit(){
 
     tbody.innerHTML=teachers.map(t=>{
       const tm=merits.filter(m=>m.tid===t.id);
-      const total=tm.reduce((s,m)=>s+m.points,0);
-      const totalColor=total===0?'var(--green)':total<=3?'var(--gold)':'var(--red)';
+      const netChange=tm.reduce((s,m)=>s+meritNetEffect(m),0);
+      const totalColor=netChange>=0?'var(--green)':netChange>=-3?'var(--gold)':'var(--red)';
+      const displayTotal=(netChange>=0?'+':'')+netChange;
       // Group by category to show compact badges like "⏰×2  🏖️×1"
       const byCat={};
       tm.forEach(m=>{byCat[m.category]=(byCat[m.category]||0)+1;});
@@ -2933,7 +3133,7 @@ function renderMerit(){
         <td><strong>${t.name}</strong><br><small style="color:var(--text3)">${t.sid||''}</small></td>
         <td><span class="badge b-blue">${t.class}</span></td>
         <td>${badges||'<span style="color:var(--text3);font-size:0.8rem">None 🎉</span>'}</td>
-        <td style="text-align:center;font-family:'Fredoka One',cursive;color:${totalColor};font-size:1.1rem;">-${total}</td>
+        <td style="text-align:center;font-family:'Fredoka One',cursive;color:${totalColor};font-size:1.1rem;">${displayTotal}</td>
         <td><button class="btn btn-xs btn-primary" onclick="toggleMeritDetail(${t.id},'${startStr}')">Details</button></td>
       </tr>`;
     }).join('');
@@ -2949,8 +3149,8 @@ function toggleMeritDetail(tid,weekStart){
   if(!t){area.innerHTML='';return;}
   const {end}=getWeekRange(weekStart);
   const endStr=end.toISOString().slice(0,10);
-  const catIcon={late_login:'⏰',missing_attendance:'📋',missing_eod:'📝',early_clockout:'🚪',absent_full:'🏖️',absent_half:'🌗'};
-  const catLabel={late_login:'Late Login',missing_attendance:'Missing Attendance',missing_eod:'Missing EOD',early_clockout:'Early Clock-Out',absent_full:'Full Day Absence',absent_half:'Half Day Absence'};
+  const catIcon={late_login:'⏰',missing_attendance:'📋',missing_eod:'📝',early_clockout:'🚪',absent_full:'🏖️',absent_half:'🌗',manual:'✍️'};
+  const catLabel={late_login:'Late Login',missing_attendance:'Missing Attendance',missing_eod:'Missing EOD',early_clockout:'Early Clock-Out',absent_full:'Full Day Absence',absent_half:'Half Day Absence',manual:'Manual Entry'};
   const mine=(DB.get('meritPoints')||[]).filter(m=>m.tid===tid&&m.date>=weekStart&&m.date<=endStr).sort((a,b)=>a.date.localeCompare(b.date));
   const feedbacks=DB.get('meritFeedback')||[];
   const fb=feedbacks.find(f=>f.tid===tid&&f.weekStart===weekStart);
@@ -2958,15 +3158,18 @@ function toggleMeritDetail(tid,weekStart){
   let html=`<div class="card" style="padding:1.4rem;">
     <div style="font-family:'Fredoka One',cursive;font-size:1.05rem;color:var(--primary);margin-bottom:0.9rem;">📋 ${t.name} — Week Detail</div>`;
   if(!mine.length){
-    html+='<div style="color:var(--text3);font-size:0.85rem;margin-bottom:1rem;">No deductions this week 🎉</div>';
+    html+='<div style="color:var(--text3);font-size:0.85rem;margin-bottom:1rem;">No entries this week 🎉</div>';
   } else {
     mine.forEach(m=>{
+      const isBonus=m.type==='bonus';
+      const canDelete=m.category==='manual'&&isAdmin();
       html+=`<div style="display:flex;gap:0.7rem;align-items:flex-start;padding:0.6rem 0;border-bottom:1px solid var(--border);">
         <div style="font-size:1.1rem;">${catIcon[m.category]||'⚠️'}</div>
         <div style="flex:1;">
-          <div style="font-size:0.83rem;font-weight:700;">${catLabel[m.category]||m.category} <span style="color:var(--red);font-weight:800;">-${m.points}</span></div>
+          <div style="font-size:0.83rem;font-weight:700;">${catLabel[m.category]||m.category} <span style="color:${isBonus?'var(--green)':'var(--red)'};font-weight:800;">${isBonus?'+':'-'}${m.points}</span></div>
           <div style="font-size:0.75rem;color:var(--text3);">${m.reason} · ${m.date}</div>
         </div>
+        ${canDelete?`<button class="btn btn-xs btn-ghost" onclick="deleteManualMeritEntry(${m.id},${tid},'${weekStart}')" title="Remove this entry">✕</button>`:''}
       </div>`;
     });
   }
@@ -4299,6 +4502,9 @@ async function finalizeClockIn(){
   DB.set('tSessions',sessions);
 
   const lateInfo=await checkLateLoginMerit(qrSelectedTeacher.id,qrSelectedTeacher.name,teacherRec?.sid,dateStr,now);
+
+  // QR scan is now the authoritative attendance record — auto-mark Present/Late, no manual entry needed
+  await autoMarkTAttFromQR(qrSelectedTeacher.id,qrSelectedTeacher.name,teacherRec?.desig,dateStr,lateInfo.late?'Late':'Present');
 
   const box=document.getElementById('qrAttendBox');
   const warnHtml=lateInfo.late
