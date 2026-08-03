@@ -1179,6 +1179,39 @@ tbody td strong{color:var(--text);font-weight:700;}
         </div>
       </div>
 
+      <!-- ── MERIT POINTS ── -->
+      <div class="panel" id="panel-merit">
+        <div class="sec-hd">
+          <div class="sec-title">🏅 Teacher Merit Points</div>
+          <div class="sec-actions">
+            <input type="date" id="meritWeekPick" class="f-sel" style="width:auto" onchange="renderMerit()">
+            <span id="meritWeekLabel" style="font-size:0.82rem;font-weight:700;color:var(--text2);align-self:center;background:var(--bg3);padding:0.4rem 0.8rem;border-radius:8px;"></span>
+          </div>
+        </div>
+
+        <!-- Rules banner -->
+        <div style="background:linear-gradient(135deg,rgba(139,92,246,0.08),rgba(59,130,246,0.06));border:1.5px solid rgba(139,92,246,0.2);border-radius:12px;padding:0.9rem 1.2rem;margin-bottom:1.2rem;font-size:0.82rem;color:var(--text2);line-height:1.8;">
+          <strong>📋 Point Deduction Rules:</strong><br>
+          <span id="meritRulesText"></span>
+        </div>
+
+        <!-- ADMIN / PRINCIPAL VIEW -->
+        <div id="meritAdminView" style="display:none;">
+          <div class="card"><div class="tbl-wrap">
+            <table>
+              <thead><tr>
+                <th>Teacher</th><th>Class</th><th>⏰ Late Login</th><th>📋 Missing Attendance</th><th>📝 Missing EOD</th><th>Total Deducted</th><th></th>
+              </tr></thead>
+              <tbody id="meritTableBody"></tbody>
+            </table>
+          </div></div>
+          <div id="meritDetailArea" style="margin-top:1.2rem;"></div>
+        </div>
+
+        <!-- TEACHER'S OWN VIEW -->
+        <div id="meritMyView" style="display:none;"></div>
+      </div>
+
       <!-- ── BACKUP ── -->
       <div class="panel" id="panel-backup">
         <div class="sec-hd"><div class="sec-title">🛡️ Backup & Restore</div></div>
@@ -1246,6 +1279,45 @@ tbody td strong{color:var(--text);font-weight:700;}
               <thead><tr><th>#</th><th>Name</th><th>Username</th><th>Password</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody id="usersTable"></tbody>
             </table>
+          </div>
+        </div>
+
+        <!-- Merit Point Rules -->
+        <div class="sec-hd" style="margin-top:1.6rem;">
+          <div class="sec-title">🏅 Merit Point Rules</div>
+        </div>
+        <div class="card" style="padding:1.4rem;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;max-width:600px;">
+            <div>
+              <label class="f-lbl">Expected Login Time</label>
+              <input class="f-in" type="time" id="ms_loginTime" style="margin-top:0.3rem;">
+            </div>
+            <div>
+              <label class="f-lbl">Grace Minutes</label>
+              <input class="f-in" type="number" id="ms_loginGrace" min="0" style="margin-top:0.3rem;">
+              <div style="font-size:0.72rem;color:var(--text3);margin-top:0.2rem;">Deduction starts after this many minutes past login time</div>
+            </div>
+            <div>
+              <label class="f-lbl">Late Login Penalty (points)</label>
+              <input class="f-in" type="number" id="ms_loginPenalty" min="0" style="margin-top:0.3rem;">
+            </div>
+            <div></div>
+            <div>
+              <label class="f-lbl">Attendance Marking Cutoff</label>
+              <input class="f-in" type="time" id="ms_attTime" style="margin-top:0.3rem;">
+            </div>
+            <div>
+              <label class="f-lbl">Missing Attendance Penalty (points)</label>
+              <input class="f-in" type="number" id="ms_attPenalty" min="0" style="margin-top:0.3rem;">
+            </div>
+            <div>
+              <label class="f-lbl">Missing EOD Report Penalty (points)</label>
+              <input class="f-in" type="number" id="ms_eodPenalty" min="0" style="margin-top:0.3rem;">
+            </div>
+          </div>
+          <div style="margin-top:1rem;display:flex;gap:0.7rem;align-items:center;">
+            <button class="btn btn-primary" onclick="saveMeritSettings()">💾 Save Rules</button>
+            <div style="font-size:0.8rem;color:var(--text3)" id="ms_msg"></div>
           </div>
         </div>
       </div>
@@ -1584,7 +1656,7 @@ const DB = {
   }
 };
 
-const BK_KEYS = ['users','students','teachers','enquiries','admissions','sAtt','tAtt','feePayments','expenses','tSessions'];
+const BK_KEYS = ['users','students','teachers','enquiries','admissions','sAtt','tAtt','feePayments','expenses','tSessions','meritPoints','eodReports','meritFeedback','meritSettings'];
 
 // ───────────────────────────────
 //  localStorage AUTO-BACKUP (safety net)
@@ -1654,6 +1726,63 @@ function setupRealtimeSync(){
 }
 
 // ───────────────────────────────
+//  ANTI-STALE-DATA PROTECTION
+//  Mobile browsers freeze background tabs, which can
+//  silently stop the realtime listener above. If someone
+//  leaves the app open overnight then saves something the
+//  next day, they could overwrite the cloud with yesterday's
+//  outdated data — deleting anything added in between.
+//  Fix: force a fresh pull from Firebase every time the tab
+//  becomes visible/focused again, and periodically as backup.
+// ───────────────────────────────
+let _lastFreshPull=Date.now();
+async function forceRefreshCache(){
+  try{
+    const snap=await fbDB.ref(FB_PATH).once('value');
+    const data=snap.val()||{};
+    BK_KEYS.forEach(k=>{
+      if(data[k]!==undefined&&data[k]!==null){CACHE[k]=data[k];lsSave(k,data[k]);}
+    });
+    _lastFreshPull=Date.now();
+    if(CU) checkDailyAttendanceMerit(); // idempotent daily merit sweep on every refresh
+    // Re-render whatever panel is currently open so the screen reflects latest data
+    const active=document.querySelector('.panel.active');
+    if(active&&CU){
+      const id=active.id.replace('panel-','');
+      const renderers={
+        dashboard:renderDashboard, students:renderStudents, teachers:renderTeachers,
+        enquiries:()=>{renderEnquiries();renderEnqPills();},
+        admissions:()=>{renderAdmissions();renderAdmStats();renderPendingAdm();},
+        fees:()=>{renderFees();renderFeeSummary();},
+        expenses:()=>{renderExpenses();renderExpSummary();},
+      };
+      if(renderers[id]) renderers[id]();
+    }
+    console.log('[TC] Cache refreshed from server ✓');
+  }catch(e){
+    console.warn('[TC] Refresh failed (offline?):',e.code||e.message);
+  }
+}
+
+// Refresh the moment the tab/app becomes visible again (covers "left open overnight")
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'&&CU){
+    forceRefreshCache();
+  }
+});
+window.addEventListener('focus',()=>{
+  if(CU&&Date.now()-_lastFreshPull>30000){ // avoid duplicate rapid calls
+    forceRefreshCache();
+  }
+});
+// Safety-net heartbeat every 3 minutes while the tab is open and active
+setInterval(()=>{
+  if(CU&&document.visibilityState==='visible'){
+    forceRefreshCache();
+  }
+},180000);
+
+// ───────────────────────────────
 //  Seed default data if Firebase
 //  is empty (first time setup)
 // ───────────────────────────────
@@ -1673,6 +1802,14 @@ function initDB(){
   if(!DB.get('feePayments'))DB.set('feePayments',[]);
   if(!DB.get('expenses'))   DB.set('expenses',[]);
   if(!DB.get('tSessions'))  DB.set('tSessions',[]);
+  if(!DB.get('meritPoints'))    DB.set('meritPoints',[]);
+  if(!DB.get('eodReports'))     DB.set('eodReports',[]);
+  if(!DB.get('meritFeedback'))  DB.set('meritFeedback',[]);
+  if(!DB.get('meritSettings'))  DB.set('meritSettings',{
+    loginExpectedTime:'09:30', loginGraceMin:2, loginPenalty:2,
+    attCutoffTime:'11:30', attPenalty:1,
+    eodPenalty:2
+  });
 }
 
 // ═══════════════════════════════
@@ -1680,6 +1817,10 @@ function initDB(){
 // ═══════════════════════════════
 let CU=null; // current user
 function isAdmin(){return CU&&CU.role==='admin';}
+function getMyTeacherRecord(){
+  if(!CU) return null;
+  return (DB.get('teachers')||[]).find(t=>t.username===CU.username)||null;
+}
 function adminOnlyGuard(){
   if(!isAdmin()){showToast('Only Admin can delete records','error');return true;}
   return false;
@@ -1714,6 +1855,7 @@ const NAV={
     {id:'satt',icon:'✅',label:'Student Attendance'},
     {id:'tatt',icon:'📝',label:'Teacher Attendance'},
     {id:'qrstation',icon:'📡',label:'QR Station'},
+    {id:'merit',icon:'🏅',label:'Merit Points'},
     {id:'fees',icon:'💰',label:'Fee Management'},
     {id:'expenses',icon:'🧾',label:'Expenses'},
     {id:'reports',icon:'📈',label:'Reports'},
@@ -1730,6 +1872,7 @@ const NAV={
     {id:'satt',icon:'✅',label:'Student Attendance'},
     {id:'tatt',icon:'📝',label:'Teacher Attendance'},
     {id:'qrstation',icon:'📡',label:'QR Station'},
+    {id:'merit',icon:'🏅',label:'Merit Points'},
     {id:'fees',icon:'💰',label:'Fee Management'},
     {id:'reports',icon:'📈',label:'Reports'},
     {id:'idcards',icon:'🪪',label:'ID Cards'},
@@ -1739,10 +1882,11 @@ const NAV={
     {id:'enquiries',icon:'📋',label:'Enquiries'},
     {id:'students',icon:'👦',label:'My Students'},
     {id:'satt',icon:'✅',label:'Student Attendance'},
+    {id:'merit',icon:'🏅',label:'My Merit Points'},
   ]
 };
 
-const PANEL_TITLES={dashboard:'Dashboard',enquiries:'Admission Enquiries',admissions:'Admissions',students:'Student Management',teachers:'Teacher Management',satt:'Student Attendance',tatt:'Teacher Attendance',fees:'Fee Management',expenses:'Expense Tracker',reports:'Reports & Downloads',idcards:'🪪 ID Cards',qrstation:'📡 QR Attendance Station',backup:'Backup & Restore',settings:'Settings'};
+const PANEL_TITLES={dashboard:'Dashboard',enquiries:'Admission Enquiries',admissions:'Admissions',students:'Student Management',teachers:'Teacher Management',satt:'Student Attendance',tatt:'Teacher Attendance',fees:'Fee Management',expenses:'Expense Tracker',reports:'Reports & Downloads',idcards:'🪪 ID Cards',qrstation:'📡 QR Attendance Station',merit:'🏅 Merit Points',backup:'Backup & Restore',settings:'Settings'};
 
 function initApp(){
   // sidebar user info
@@ -1797,6 +1941,7 @@ function showPanel(id){
     satt:renderSAtt,
     tatt:()=>{renderTAtt();populateTAttHistTeachers();},
     qrstation:renderQRStation,
+    merit:renderMerit,
     fees:()=>{populateFeeStudents();renderFees();renderFeeSummary();},
     expenses:()=>{renderExpenses();renderExpSummary();},
     reports:()=>renderRepAtt(),
@@ -1822,6 +1967,7 @@ function closeModal(id){document.getElementById(id).classList.remove('open');}
 //  DASHBOARD
 // ═══════════════════════════════
 function renderDashboard(){
+  checkDailyAttendanceMerit(); // idempotent daily merit sweep
   const students=DB.get('students')||[];
   const teachers=DB.get('teachers')||[];
   const enquiries=DB.get('enquiries')||[];
@@ -2109,7 +2255,7 @@ function renderPendingAdm(){
   </tr>`).join('');
 }
 
-function saveDirectAdm(){
+async function saveDirectAdm(){
   const name=document.getElementById('da_name').value.trim();
   const parent=document.getElementById('da_parent').value.trim();
   const phone=document.getElementById('da_phone').value.trim();
@@ -2117,20 +2263,23 @@ function saveDirectAdm(){
   const today=new Date().toISOString().slice(0,10);
   const admdate=document.getElementById('da_admdate').value||today;
   const enqId=Date.now();
-  // create enquiry record (for reporting)
-  const enqs=DB.get('enquiries')||[];
+  const saveBtn=document.querySelector('#newAdmModal .btn-primary');
+  if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Saving...';}
+  // create enquiry record (for reporting) — fetch fresh to avoid stale-tab overwrite
+  const enqs=await getFreshCollection('enquiries');
   enqs.push({id:enqId,name,dob:document.getElementById('da_dob').value,gender:document.getElementById('da_gender').value,class:document.getElementById('da_class').value,parent,rel:document.getElementById('da_rel').value,phone,email:document.getElementById('da_email').value,source:'Walk-in',status:'Admitted',notes:'Direct admission',date:new Date().toLocaleDateString('en-IN'),admissionDate:admdate});
   DB.set('enquiries',enqs);
   // admission record
-  const adms=DB.get('admissions')||[];
+  const adms=await getFreshCollection('admissions');
   const adm={id:Date.now()+1,enqId,name,dob:document.getElementById('da_dob').value,gender:document.getElementById('da_gender').value,class:document.getElementById('da_class').value,parent,rel:document.getElementById('da_rel').value,phone,email:document.getElementById('da_email').value,admissionDate:admdate,fee:parseFloat(document.getElementById('da_fee').value)||0,status:'Active',notes:''};
   adms.push(adm);DB.set('admissions',adms);
   // student record
-  const students=DB.get('students')||[];
+  const students=await getFreshCollection('students');
   const daSid=document.getElementById('da_sid').value.trim()||generateSid();
   const daPhoto=document.getElementById('da_photo_b64').value||'';
   students.push({id:Date.now()+2,sid:daSid,photo:daPhoto,name,dob:document.getElementById('da_dob').value,gender:document.getElementById('da_gender').value,class:document.getElementById('da_class').value,blood:'Unknown',admdate,parent,rel:document.getElementById('da_rel').value,phone,phone2:'',email:document.getElementById('da_email').value,fee:parseFloat(document.getElementById('da_fee').value)||0,paidFee:0,address:document.getElementById('da_address').value,status:'Active'});
   DB.set('students',students);
+  if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='✅ Confirm Admission';}
   closeModal('newAdmModal');renderAdmissions();renderAdmStats();renderPendingAdm();
   showToast(`✅ ${name} admitted directly!`,'success');
 }
@@ -2234,24 +2383,44 @@ function renderStudents(){
   }).join('');
 }
 
-function saveStudent(){
+// Fetch the absolute latest copy of a collection from Firebase right now,
+// falling back to CACHE if offline/slow — used before critical "add" writes
+// so we never build on top of stale/outdated local data.
+function getFreshCollection(key,timeoutMs=3000){
+  return new Promise(resolve=>{
+    let done=false;
+    const timer=setTimeout(()=>{if(!done){done=true;resolve(DB.get(key)||[]);}},timeoutMs);
+    fbDB.ref(FB_PATH+'/'+key).once('value',snap=>{
+      if(done)return;done=true;clearTimeout(timer);
+      const v=snap.val();
+      resolve(Array.isArray(v)?v:(v?Object.values(v):[]));
+    },()=>{if(!done){done=true;clearTimeout(timer);resolve(DB.get(key)||[]);}});
+  });
+}
+
+async function saveStudent(){
   const name=document.getElementById('s_name').value.trim();
   const parent=document.getElementById('s_parent').value.trim();
   const phone=document.getElementById('s_phone').value.trim();
   if(!name||!parent||!phone){showToast('Fill Name, Parent & Phone','error');return;}
   const sid=document.getElementById('s_sid').value.trim()||generateSid();
   const photo=document.getElementById('s_photo_b64').value||'';
-  const sts=DB.get('students')||[];
+  const saveBtn=document.querySelector('#stuModal .btn-primary');
+  if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Saving...';}
+  const sts=await getFreshCollection('students'); // always build on the LATEST data, never stale cache
   const obj={name,sid,photo,dob:document.getElementById('s_dob').value,gender:document.getElementById('s_gender').value,class:document.getElementById('s_class').value,blood:document.getElementById('s_blood').value,admdate:document.getElementById('s_admdate').value,parent,rel:document.getElementById('s_rel').value,phone,phone2:document.getElementById('s_phone2').value,email:document.getElementById('s_email').value,fee:parseFloat(document.getElementById('s_fee').value)||0,address:document.getElementById('s_address').value,status:document.getElementById('s_status').value};
   if(editStuId){
     const idx=sts.findIndex(s=>s.id===editStuId);
     if(idx>=0){obj.id=editStuId;obj.paidFee=sts[idx].paidFee||0;if(!photo)obj.photo=sts[idx].photo||'';sts[idx]=obj;}
+    else{obj.id=editStuId;obj.paidFee=0;sts.push(obj);} // safety: record vanished from fresh pull, re-add it
     showToast('Student updated ✅','success');
   } else {
     obj.id=Date.now();obj.paidFee=0;sts.push(obj);
     showToast('Student added ✅','success');
   }
-  DB.set('students',sts);closeModal('stuModal');renderStudents();
+  DB.set('students',sts);
+  if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Save Student';}
+  closeModal('stuModal');renderStudents();
 }
 
 function deleteStu(id){
@@ -2500,6 +2669,243 @@ function updTAsum(){
   document.getElementById('tAttP').textContent=v.filter(x=>x==='Present').length;
   document.getElementById('tAttA').textContent=v.filter(x=>x==='Absent').length;
   document.getElementById('tAttL').textContent=v.filter(x=>x==='Late').length;
+}
+
+// ═══════════════════════════════
+//  MERIT POINTS SYSTEM
+// ═══════════════════════════════
+function getMeritSettings(){
+  return DB.get('meritSettings')||{
+    loginExpectedTime:'09:30', loginGraceMin:2, loginPenalty:2,
+    attCutoffTime:'11:30', attPenalty:1,
+    eodPenalty:2
+  };
+}
+
+function meritRulesText(){
+  const s=getMeritSettings();
+  return `⏰ Login after <strong>${fmtTime12(s.loginExpectedTime)}</strong> + ${s.loginGraceMin} min grace → <strong style="color:var(--red)">-${s.loginPenalty} pts</strong> &nbsp;|&nbsp; `
+    +`📋 Student attendance not marked by <strong>${fmtTime12(s.attCutoffTime)}</strong> → <strong style="color:var(--red)">-${s.attPenalty} pt</strong> &nbsp;|&nbsp; `
+    +`📝 Clocked out without End-of-Day report → <strong style="color:var(--red)">-${s.eodPenalty} pts</strong>`;
+}
+
+function fmtTime12(hhmm){
+  const [h,m]=hhmm.split(':').map(Number);
+  const d=new Date();d.setHours(h,m,0,0);
+  return d.toLocaleTimeString('en-IN',{hour:'numeric',minute:'2-digit',hour12:true});
+}
+
+function saveMeritSettings(){
+  const s={
+    loginExpectedTime:document.getElementById('ms_loginTime').value||'09:30',
+    loginGraceMin:parseInt(document.getElementById('ms_loginGrace').value)||0,
+    loginPenalty:parseFloat(document.getElementById('ms_loginPenalty').value)||0,
+    attCutoffTime:document.getElementById('ms_attTime').value||'11:30',
+    attPenalty:parseFloat(document.getElementById('ms_attPenalty').value)||0,
+    eodPenalty:parseFloat(document.getElementById('ms_eodPenalty').value)||0,
+  };
+  DB.set('meritSettings',s);
+  const msg=document.getElementById('ms_msg');
+  if(msg){msg.textContent='✅ Saved!';msg.style.color='var(--green)';setTimeout(()=>msg.textContent='',2000);}
+  showToast('Merit point rules saved ✅','success');
+}
+
+function loadMeritSettingsIntoForm(){
+  const s=getMeritSettings();
+  const map={ms_loginTime:'loginExpectedTime',ms_loginGrace:'loginGraceMin',ms_loginPenalty:'loginPenalty',ms_attTime:'attCutoffTime',ms_attPenalty:'attPenalty',ms_eodPenalty:'eodPenalty'};
+  Object.entries(map).forEach(([elId,key])=>{const el=document.getElementById(elId);if(el)el.value=s[key];});
+}
+
+// Log a deduction (or skip if already logged for that teacher/date/category — prevents duplicates)
+async function logMeritDeduction(tid,name,sid,dateStr,category,points,reason){
+  const list=await getFreshCollection('meritPoints');
+  if(list.some(m=>m.tid===tid&&m.date===dateStr&&m.category===category)) return; // already logged
+  list.push({id:Date.now()+Math.floor(Math.random()*1000),tid,name,sid:sid||'',date:dateStr,category,points,reason,ts:new Date().toISOString()});
+  DB.set('meritPoints',list);
+}
+
+// Called right after a teacher clocks IN via QR
+async function checkLateLoginMerit(teacherId,name,sid,dateStr,clockInDate){
+  const s=getMeritSettings();
+  const [h,m]=s.loginExpectedTime.split(':').map(Number);
+  const cutoff=new Date(clockInDate);cutoff.setHours(h,m+(s.loginGraceMin||0),0,0);
+  if(clockInDate>cutoff){
+    const reason=`Clocked in at ${clockInDate.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true})} — expected by ${fmtTime12(s.loginExpectedTime)}`;
+    await logMeritDeduction(teacherId,name,sid,dateStr,'late_login',s.loginPenalty,reason);
+    return {late:true,penalty:s.loginPenalty};
+  }
+  return {late:false};
+}
+
+// Daily sweep — checks if each teacher's class attendance was marked by the cutoff time.
+// Safe to call repeatedly (idempotent) — only logs once per teacher per day.
+async function checkDailyAttendanceMerit(){
+  try{
+    const s=getMeritSettings();
+    const now=new Date();
+    const [ch,cm]=s.attCutoffTime.split(':').map(Number);
+    const cutoff=new Date(now);cutoff.setHours(ch,cm,0,0);
+    if(now<cutoff) return; // not yet time to check
+    const today=now.toISOString().slice(0,10);
+    const teachers=(DB.get('teachers')||[]).filter(t=>t.status==='Active'&&t.class&&t.class!=='All Classes');
+    if(!teachers.length) return;
+    const sAttToday=(DB.get('sAtt')||[]).filter(a=>a.date===today);
+    const markedClasses=new Set(sAttToday.map(a=>a.class));
+    const existing=DB.get('meritPoints')||[];
+    for(const t of teachers){
+      if(markedClasses.has(t.class)) continue;
+      const already=existing.some(m=>m.tid===t.id&&m.date===today&&m.category==='missing_attendance');
+      if(already) continue;
+      await logMeritDeduction(t.id,t.name,t.sid,today,'missing_attendance',s.attPenalty,
+        `Student attendance for ${t.class} not marked by ${fmtTime12(s.attCutoffTime)}`);
+    }
+  }catch(e){console.warn('[TC] Merit attendance check failed:',e);}
+}
+
+// ─── Week helpers ───
+function getWeekRange(dateStr){
+  const d=dateStr?new Date(dateStr+'T00:00:00'):new Date();
+  const day=d.getDay(); // 0=Sun..6=Sat
+  const diffToMon=day===0?-6:1-day;
+  const monday=new Date(d);monday.setDate(d.getDate()+diffToMon);monday.setHours(0,0,0,0);
+  const sunday=new Date(monday);sunday.setDate(monday.getDate()+6);
+  return {start:monday,end:sunday};
+}
+function fmtDateShort(d){return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});}
+
+// ─── Main Merit Points panel render ───
+function renderMerit(){
+  const rulesEl=document.getElementById('meritRulesText');
+  if(rulesEl) rulesEl.innerHTML=meritRulesText();
+
+  const isTeacherViewer=CU&&CU.role==='teacher';
+  const adminView=document.getElementById('meritAdminView');
+  const myView=document.getElementById('meritMyView');
+
+  const wkInput=document.getElementById('meritWeekPick');
+  if(wkInput&&!wkInput.value) wkInput.value=new Date().toISOString().slice(0,10);
+  const {start,end}=getWeekRange(wkInput?wkInput.value:null);
+  const startStr=start.toISOString().slice(0,10),endStr=end.toISOString().slice(0,10);
+  const lbl=document.getElementById('meritWeekLabel');
+  if(lbl) lbl.textContent=`Week: ${fmtDateShort(start)} – ${fmtDateShort(end)}`;
+
+  const merits=(DB.get('meritPoints')||[]).filter(m=>m.date>=startStr&&m.date<=endStr);
+  const feedbacks=DB.get('meritFeedback')||[];
+  const catIcon={late_login:'⏰',missing_attendance:'📋',missing_eod:'📝'};
+  const catLabel={late_login:'Late Login',missing_attendance:'Missing Attendance',missing_eod:'Missing EOD'};
+
+  if(isTeacherViewer){
+    adminView.style.display='none';
+    myView.style.display='block';
+    const me=getMyTeacherRecord();
+    if(!me){myView.innerHTML='<div class="empty"><div class="ei">🏅</div><p>Staff record not found. Contact admin.</p></div>';return;}
+    const mine=merits.filter(m=>m.tid===me.id).sort((a,b)=>b.date.localeCompare(a.date));
+    const total=mine.reduce((s,m)=>s+m.points,0);
+    const fb=feedbacks.find(f=>f.tid===me.id&&f.weekStart===startStr);
+    const statusColor=total===0?'var(--green)':total<=3?'var(--gold)':'var(--red)';
+    const statusBg=total===0?'var(--green-lt)':total<=3?'var(--gold-lt)':'var(--red-lt)';
+    const statusLabel=total===0?'✅ Perfect Week!':total<=3?'⚠️ Room to Improve':'🔴 Needs Attention';
+
+    let html=`<div style="background:white;border-radius:20px;box-shadow:var(--shadow);overflow:hidden;max-width:560px;">
+      <div style="padding:1.8rem;text-align:center;background:${statusBg};">
+        <div style="font-family:'Fredoka One',cursive;font-size:2.6rem;color:${statusColor};">-${total}<span style="font-size:1.1rem"> pts</span></div>
+        <div style="font-family:'Fredoka One',cursive;font-size:1.1rem;color:${statusColor};margin-top:0.3rem;">${statusLabel}</div>
+      </div>
+      <div style="padding:1.4rem 1.6rem;">`;
+    if(!mine.length){
+      html+=`<div style="text-align:center;color:var(--text3);padding:1rem;">No deductions this week 🎉</div>`;
+    } else {
+      mine.forEach(m=>{
+        html+=`<div style="display:flex;gap:0.7rem;align-items:flex-start;padding:0.7rem 0;border-bottom:1px solid var(--border);">
+          <div style="font-size:1.2rem;">${catIcon[m.category]||'⚠️'}</div>
+          <div style="flex:1;">
+            <div style="font-size:0.85rem;font-weight:700;color:var(--text);">${catLabel[m.category]||m.category} <span style="color:var(--red);font-weight:800;">-${m.points}</span></div>
+            <div style="font-size:0.76rem;color:var(--text3);margin-top:1px;">${m.reason}</div>
+            <div style="font-size:0.7rem;color:var(--text3);margin-top:2px;">📅 ${m.date}</div>
+          </div>
+        </div>`;
+      });
+    }
+    if(fb&&fb.text){
+      html+=`<div style="margin-top:1rem;background:var(--blue-lt);border-radius:10px;padding:0.9rem 1.1rem;font-size:0.83rem;color:var(--text2);">
+        <strong style="color:var(--blue)">💬 Feedback from ${fb.by||'Management'}:</strong><br>${fb.text}
+      </div>`;
+    }
+    html+='</div></div>';
+    myView.innerHTML=html;
+  } else {
+    adminView.style.display='block';
+    myView.style.display='none';
+    const teachers=(DB.get('teachers')||[]).filter(t=>t.status==='Active');
+    const tbody=document.getElementById('meritTableBody');
+    if(!teachers.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text3)">No active teachers.</td></tr>';return;}
+
+    tbody.innerHTML=teachers.map(t=>{
+      const tm=merits.filter(m=>m.tid===t.id);
+      const lateLogin=tm.filter(m=>m.category==='late_login').reduce((s,m)=>s+m.points,0);
+      const missAtt=tm.filter(m=>m.category==='missing_attendance').reduce((s,m)=>s+m.points,0);
+      const missEod=tm.filter(m=>m.category==='missing_eod').reduce((s,m)=>s+m.points,0);
+      const total=lateLogin+missAtt+missEod;
+      const totalColor=total===0?'var(--green)':total<=3?'var(--gold)':'var(--red)';
+      return `<tr>
+        <td><strong>${t.name}</strong><br><small style="color:var(--text3)">${t.sid||''}</small></td>
+        <td><span class="badge b-blue">${t.class}</span></td>
+        <td style="text-align:center;color:${lateLogin?'var(--red)':'var(--text3)'};font-weight:700">${lateLogin?'-'+lateLogin:'0'}</td>
+        <td style="text-align:center;color:${missAtt?'var(--red)':'var(--text3)'};font-weight:700">${missAtt?'-'+missAtt:'0'}</td>
+        <td style="text-align:center;color:${missEod?'var(--red)':'var(--text3)'};font-weight:700">${missEod?'-'+missEod:'0'}</td>
+        <td style="text-align:center;font-family:'Fredoka One',cursive;color:${totalColor};font-size:1.1rem;">-${total}</td>
+        <td><button class="btn btn-xs btn-primary" onclick="toggleMeritDetail(${t.id},'${startStr}')">Details</button></td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+let meritDetailOpenFor=null;
+function toggleMeritDetail(tid,weekStart){
+  const area=document.getElementById('meritDetailArea');
+  if(meritDetailOpenFor===tid){meritDetailOpenFor=null;area.innerHTML='';return;}
+  meritDetailOpenFor=tid;
+  const t=(DB.get('teachers')||[]).find(x=>x.id===tid);
+  if(!t){area.innerHTML='';return;}
+  const {end}=getWeekRange(weekStart);
+  const endStr=end.toISOString().slice(0,10);
+  const catIcon={late_login:'⏰',missing_attendance:'📋',missing_eod:'📝'};
+  const catLabel={late_login:'Late Login',missing_attendance:'Missing Attendance',missing_eod:'Missing EOD'};
+  const mine=(DB.get('meritPoints')||[]).filter(m=>m.tid===tid&&m.date>=weekStart&&m.date<=endStr).sort((a,b)=>a.date.localeCompare(b.date));
+  const feedbacks=DB.get('meritFeedback')||[];
+  const fb=feedbacks.find(f=>f.tid===tid&&f.weekStart===weekStart);
+
+  let html=`<div class="card" style="padding:1.4rem;">
+    <div style="font-family:'Fredoka One',cursive;font-size:1.05rem;color:var(--primary);margin-bottom:0.9rem;">📋 ${t.name} — Week Detail</div>`;
+  if(!mine.length){
+    html+='<div style="color:var(--text3);font-size:0.85rem;margin-bottom:1rem;">No deductions this week 🎉</div>';
+  } else {
+    mine.forEach(m=>{
+      html+=`<div style="display:flex;gap:0.7rem;align-items:flex-start;padding:0.6rem 0;border-bottom:1px solid var(--border);">
+        <div style="font-size:1.1rem;">${catIcon[m.category]||'⚠️'}</div>
+        <div style="flex:1;">
+          <div style="font-size:0.83rem;font-weight:700;">${catLabel[m.category]||m.category} <span style="color:var(--red);font-weight:800;">-${m.points}</span></div>
+          <div style="font-size:0.75rem;color:var(--text3);">${m.reason} · ${m.date}</div>
+        </div>
+      </div>`;
+    });
+  }
+  html+=`<div style="margin-top:1rem;">
+    <label class="f-lbl">💬 Weekly Feedback for ${t.name}</label>
+    <textarea class="f-in" id="meritFb-${tid}" rows="3" style="margin-top:0.4rem;" placeholder="What did they do well? What needs improvement?">${fb?fb.text:''}</textarea>
+    <button class="btn btn-primary btn-xs" style="margin-top:0.6rem;" onclick="saveMeritFeedback(${tid},'${weekStart}')">💾 Save Feedback</button>
+  </div></div>`;
+  area.innerHTML=html;
+}
+
+function saveMeritFeedback(tid,weekStart){
+  const text=(document.getElementById('meritFb-'+tid).value||'').trim();
+  let fbs=DB.get('meritFeedback')||[];
+  const idx=fbs.findIndex(f=>f.tid===tid&&f.weekStart===weekStart);
+  if(idx>=0) fbs[idx].text=text;
+  else fbs.push({id:Date.now(),tid,weekStart,text,by:CU.name,date:new Date().toISOString().slice(0,10)});
+  DB.set('meritFeedback',fbs);
+  showToast('Feedback saved ✅','success');
 }
 
 function saveTAtt(){
@@ -2907,6 +3313,7 @@ function renderUsers(){
   const addBtn=document.querySelector('#panel-settings .btn-primary');
   if(addBtn) addBtn.style.display=isAdmin()?'':'none';
   const admin=isAdmin();
+  loadMeritSettingsIntoForm();
   document.getElementById('usersTable').innerHTML=(DB.get('users')||[]).map((u,i)=>{
     const pwdCell=admin
       ? `<span id="upwd-${u.id}" style="font-family:monospace;letter-spacing:1px;">${u.password?'••••••••':'<span style="color:var(--text3)">—</span>'}</span>
@@ -3642,34 +4049,99 @@ function selectQRTeacher(id,name){
 
 function submitQRAttend(type){
   if(!qrSelectedTeacher){showToast('Please select your name first','error');return;}
+  if(type==='out'){
+    showEODForm(); // gate clock-out behind the EOD report
+    return;
+  }
+  finalizeClockIn();
+}
+
+async function finalizeClockIn(){
   const now=new Date();
+  const dateStr=now.toISOString().slice(0,10);
   const teacherRec=(DB.get('teachers')||[]).find(t=>t.id===qrSelectedTeacher.id);
-  const sessions=DB.get('tSessions')||[];
+  const sessions=await getFreshCollection('tSessions');
   sessions.push({
     id:Date.now(),
     tid:qrSelectedTeacher.id,
     name:qrSelectedTeacher.name,
     sid:teacherRec?.sid||'',
-    type,
-    date:now.toISOString().slice(0,10),
+    type:'in',
+    date:dateStr,
+    time:now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true}),
+  });
+  DB.set('tSessions',sessions);
+
+  const lateInfo=await checkLateLoginMerit(qrSelectedTeacher.id,qrSelectedTeacher.name,teacherRec?.sid,dateStr,now);
+
+  const box=document.getElementById('qrAttendBox');
+  const warnHtml=lateInfo.late
+    ? `<div style="background:#FEF2F2;border:1.5px solid #FCA5A5;border-radius:10px;padding:0.7rem 1rem;margin-top:0.8rem;font-size:0.8rem;color:#DC2626;font-weight:700;">⚠️ Late login — <strong>-${lateInfo.penalty} merit points</strong></div>`
+    : '';
+  box.innerHTML=`<div style="background:var(--green-lt);border:2px solid rgba(16,185,129,0.3);border-radius:16px;padding:2rem;text-align:center;">
+    <div style="font-size:3.5rem;margin-bottom:0.5rem">✅</div>
+    <div style="font-family:'Fredoka One',cursive;font-size:1.5rem;color:var(--green);">Clocked In Successfully</div>
+    <div style="font-size:1rem;font-weight:700;color:var(--text);margin:0.5rem 0">${qrSelectedTeacher.name}</div>
+    <div style="font-size:0.85rem;color:var(--text3);">${now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true})} · ${now.toLocaleDateString('en-IN')}</div>
+    ${warnHtml}
+    <button class="btn btn-primary" style="margin-top:1.2rem;width:100%" onclick="resetQRAttend()">← Back (Next Person)</button>
+  </div>`;
+  clearInterval(window._qrClockInterval);
+}
+
+function showEODForm(){
+  const box=document.getElementById('qrAttendBox');
+  clearInterval(window._qrClockInterval);
+  box.innerHTML=`<div style="text-align:left;">
+    <div style="font-family:'Fredoka One',cursive;font-size:1.3rem;color:var(--text);text-align:center;margin-bottom:0.3rem;">📝 End of Day Report</div>
+    <div style="font-size:0.82rem;color:var(--text3);text-align:center;margin-bottom:1.2rem;">Hi ${qrSelectedTeacher.name}, before you clock out — what did you do today?</div>
+    <textarea id="eodText" rows="5" placeholder="e.g. Completed alphabet activity with Playgroup, updated 3 parents about progress, prepared craft materials for tomorrow..." style="width:100%;padding:0.8rem;border:2px solid var(--border);border-radius:12px;font-family:inherit;font-size:0.88rem;resize:vertical;box-sizing:border-box;"></textarea>
+    <button class="btn btn-green" style="width:100%;justify-content:center;margin-top:1rem;" onclick="finalizeClockOut(true)">✅ Submit & Clock Out</button>
+    <button style="width:100%;margin-top:0.7rem;background:none;border:none;color:var(--text3);font-size:0.76rem;text-decoration:underline;cursor:pointer;padding:0.4rem;" onclick="finalizeClockOut(false)">Skip without report (−${getMeritSettings().eodPenalty} points)</button>
+  </div>`;
+}
+
+async function finalizeClockOut(withEOD){
+  const now=new Date();
+  const dateStr=now.toISOString().slice(0,10);
+  const teacherRec=(DB.get('teachers')||[]).find(t=>t.id===qrSelectedTeacher.id);
+  let eodMissing=false;
+
+  if(withEOD){
+    const text=(document.getElementById('eodText')?.value||'').trim();
+    if(!text){showToast('Please write a short summary, or tap Skip below','error');return;}
+    const reports=await getFreshCollection('eodReports');
+    reports.push({id:Date.now(),tid:qrSelectedTeacher.id,name:qrSelectedTeacher.name,sid:teacherRec?.sid||'',date:dateStr,summary:text,ts:now.toISOString()});
+    DB.set('eodReports',reports);
+  } else {
+    eodMissing=true;
+    await logMeritDeduction(qrSelectedTeacher.id,qrSelectedTeacher.name,teacherRec?.sid,dateStr,'missing_eod',getMeritSettings().eodPenalty,'Clocked out without submitting an End-of-Day report');
+  }
+
+  const sessions=await getFreshCollection('tSessions');
+  sessions.push({
+    id:Date.now()+1,
+    tid:qrSelectedTeacher.id,
+    name:qrSelectedTeacher.name,
+    sid:teacherRec?.sid||'',
+    type:'out',
+    date:dateStr,
     time:now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true}),
   });
   DB.set('tSessions',sessions);
 
   const box=document.getElementById('qrAttendBox');
-  const clr=type==='in'?'var(--green-lt)':'var(--red-lt)';
-  const bdClr=type==='in'?'rgba(16,185,129,0.3)':'rgba(239,68,68,0.3)';
-  const txtClr=type==='in'?'var(--green)':'var(--red)';
-  const icon=type==='in'?'✅':'🔴';
-  const label=type==='in'?'Clocked In Successfully':'Clocked Out Successfully';
-  box.innerHTML=`<div style="background:${clr};border:2px solid ${bdClr};border-radius:16px;padding:2rem;text-align:center;">
-    <div style="font-size:3.5rem;margin-bottom:0.5rem">${icon}</div>
-    <div style="font-family:'Fredoka One',cursive;font-size:1.5rem;color:${txtClr};">${label}</div>
+  const noteHtml=eodMissing
+    ? `<div style="background:#FEF2F2;border:1.5px solid #FCA5A5;border-radius:10px;padding:0.7rem 1rem;margin-top:0.8rem;font-size:0.8rem;color:#DC2626;font-weight:700;">⚠️ EOD report skipped — <strong>-${getMeritSettings().eodPenalty} merit points</strong></div>`
+    : `<div style="background:var(--green-lt);border:1.5px solid rgba(16,185,129,0.3);border-radius:10px;padding:0.7rem 1rem;margin-top:0.8rem;font-size:0.8rem;color:var(--green);font-weight:700;">✅ End-of-day report submitted — thank you!</div>`;
+  box.innerHTML=`<div style="background:var(--red-lt);border:2px solid rgba(239,68,68,0.3);border-radius:16px;padding:2rem;text-align:center;">
+    <div style="font-size:3.5rem;margin-bottom:0.5rem">🔴</div>
+    <div style="font-family:'Fredoka One',cursive;font-size:1.5rem;color:var(--red);">Clocked Out Successfully</div>
     <div style="font-size:1rem;font-weight:700;color:var(--text);margin:0.5rem 0">${qrSelectedTeacher.name}</div>
     <div style="font-size:0.85rem;color:var(--text3);">${now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true})} · ${now.toLocaleDateString('en-IN')}</div>
+    ${noteHtml}
     <button class="btn btn-primary" style="margin-top:1.2rem;width:100%" onclick="resetQRAttend()">← Back (Next Person)</button>
   </div>`;
-  clearInterval(window._qrClockInterval);
 }
 
 function resetQRAttend(){
