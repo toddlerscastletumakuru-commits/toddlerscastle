@@ -315,6 +315,7 @@ tbody td strong{color:var(--text);font-weight:700;}
 .att-card.present{border-color:#10B981;background:var(--green-lt);}
 .att-card.absent{border-color:#EF4444;background:var(--red-lt);}
 .att-card.late{border-color:#F59E0B;background:var(--gold-lt);}
+.att-card.half-day{border-color:#8B5CF6;background:var(--purple-lt);}
 .att-pers{display:flex;align-items:center;gap:0.75rem;}
 .att-av{width:40px;height:40px;border-radius:10px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;}
 .att-name{font-weight:700;font-size:0.9rem;color:var(--text);}
@@ -325,6 +326,7 @@ tbody td strong{color:var(--text);font-weight:700;}
 .att-btn.p-sel{background:var(--green-lt);border-color:var(--green);}
 .att-btn.a-sel{background:var(--red-lt);border-color:var(--red);}
 .att-btn.l-sel{background:var(--gold-lt);border-color:var(--gold);}
+.att-btn.h-sel{background:var(--purple-lt);border-color:var(--purple);}
 
 /* ════ SECTIONS ════ */
 .sec-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.2rem;flex-wrap:wrap;gap:0.8rem;}
@@ -1200,7 +1202,7 @@ tbody td strong{color:var(--text);font-weight:700;}
           <div class="card"><div class="tbl-wrap">
             <table>
               <thead><tr>
-                <th>Teacher</th><th>Class</th><th>⏰ Late Login</th><th>📋 Missing Attendance</th><th>📝 Missing EOD</th><th>Total Deducted</th><th></th>
+                <th>Teacher</th><th>Class</th><th>Deductions This Week</th><th>Total Points</th><th></th>
               </tr></thead>
               <tbody id="meritTableBody"></tbody>
             </table>
@@ -1341,6 +1343,26 @@ tbody td strong{color:var(--text);font-weight:700;}
             <div>
               <label class="f-lbl">Missing EOD Report Penalty (points)</label>
               <input class="f-in" type="number" id="ms_eodPenalty" min="0" style="margin-top:0.3rem;">
+            </div>
+            <div></div>
+            <div>
+              <label class="f-lbl">Expected Clock-Out Time</label>
+              <input class="f-in" type="time" id="ms_clockOutTime" style="margin-top:0.3rem;">
+              <div style="font-size:0.72rem;color:var(--text3);margin-top:0.2rem;">Clocking out before this time is considered "early"</div>
+            </div>
+            <div>
+              <label class="f-lbl">Early Clock-Out Penalty (points)</label>
+              <input class="f-in" type="number" id="ms_earlyOutPenalty" min="0" style="margin-top:0.3rem;">
+            </div>
+            <div>
+              <label class="f-lbl">Full Day Absence Penalty (points)</label>
+              <input class="f-in" type="number" id="ms_absentFullPenalty" min="0" style="margin-top:0.3rem;">
+              <div style="font-size:0.72rem;color:var(--text3);margin-top:0.2rem;">Applied when marked "Absent" in Teacher Attendance</div>
+            </div>
+            <div>
+              <label class="f-lbl">Half Day Absence Penalty (points)</label>
+              <input class="f-in" type="number" id="ms_absentHalfPenalty" min="0" style="margin-top:0.3rem;">
+              <div style="font-size:0.72rem;color:var(--text3);margin-top:0.2rem;">Applied when marked "Half Day" in Teacher Attendance</div>
             </div>
           </div>
           <div style="margin-top:1rem;display:flex;gap:0.7rem;align-items:center;">
@@ -1836,7 +1858,9 @@ function initDB(){
   if(!DB.get('meritSettings'))  DB.set('meritSettings',{
     loginExpectedTime:'09:30', loginGraceMin:2, loginPenalty:2,
     attCutoffTime:'11:30', attPenalty:1,
-    eodPenalty:2
+    eodPenalty:2,
+    clockOutExpectedTime:'16:00', earlyClockOutPenalty:2,
+    absentFullDayPenalty:5, absentHalfDayPenalty:3
   });
 }
 
@@ -2672,14 +2696,15 @@ function renderTAtt(){
   if(!teachers.length){grid.innerHTML='<div class="empty"><div class="ei">👩‍🏫</div><p>No active teachers.</p></div>';return;}
   grid.innerHTML=teachers.map(t=>{
     const cur=tAS[t.id]||'';
-    return `<div class="att-card${cur?' '+cur.toLowerCase():''}" id="tacard-${t.id}">
+    return `<div class="att-card${cur?' '+cur.toLowerCase().replace(' ','-'):''}" id="tacard-${t.id}">
       <div class="att-pers"><div class="att-av">👩‍🏫</div>
         <div><div class="att-name">${t.name}</div><div class="att-sub">${t.desig}·${t.class}</div></div>
       </div>
       <div class="att-btns">
         <button class="att-btn${cur==='Present'?' p-sel':''}" onclick="markTA(${t.id},'Present')" title="Present">✅</button>
-        <button class="att-btn${cur==='Absent'?' a-sel':''}" onclick="markTA(${t.id},'Absent')" title="Absent">❌</button>
+        <button class="att-btn${cur==='Absent'?' a-sel':''}" onclick="markTA(${t.id},'Absent')" title="Absent (Full Day)">❌</button>
         <button class="att-btn${cur==='Late'?' l-sel':''}" onclick="markTA(${t.id},'Late')" title="Late">⏰</button>
+        <button class="att-btn${cur==='Half Day'?' h-sel':''}" onclick="markTA(${t.id},'Half Day')" title="Half Day">🌗</button>
       </div>
     </div>`;
   }).join('');
@@ -2689,9 +2714,9 @@ function renderTAtt(){
 function markTA(tid,status){
   tAS[tid]=status;
   const card=document.getElementById('tacard-'+tid);
-  card.className='att-card '+status.toLowerCase();
-  card.querySelectorAll('.att-btn').forEach(b=>b.classList.remove('p-sel','a-sel','l-sel'));
-  const m={Present:0,Absent:1,Late:2},cs={Present:'p-sel',Absent:'a-sel',Late:'l-sel'};
+  card.className='att-card '+status.toLowerCase().replace(' ','-');
+  card.querySelectorAll('.att-btn').forEach(b=>b.classList.remove('p-sel','a-sel','l-sel','h-sel'));
+  const m={Present:0,Absent:1,Late:2,'Half Day':3},cs={Present:'p-sel',Absent:'a-sel',Late:'l-sel','Half Day':'h-sel'};
   card.querySelectorAll('.att-btn')[m[status]]?.classList.add(cs[status]);
   updTAsum();
 }
@@ -2710,7 +2735,9 @@ function getMeritSettings(){
   return DB.get('meritSettings')||{
     loginExpectedTime:'09:30', loginGraceMin:2, loginPenalty:2,
     attCutoffTime:'11:30', attPenalty:1,
-    eodPenalty:2
+    eodPenalty:2,
+    clockOutExpectedTime:'16:00', earlyClockOutPenalty:2,
+    absentFullDayPenalty:5, absentHalfDayPenalty:3
   };
 }
 
@@ -2718,7 +2745,10 @@ function meritRulesText(){
   const s=getMeritSettings();
   return `⏰ Login after <strong>${fmtTime12(s.loginExpectedTime)}</strong> + ${s.loginGraceMin} min grace → <strong style="color:var(--red)">-${s.loginPenalty} pts</strong> &nbsp;|&nbsp; `
     +`📋 Student attendance not marked by <strong>${fmtTime12(s.attCutoffTime)}</strong> → <strong style="color:var(--red)">-${s.attPenalty} pt</strong> &nbsp;|&nbsp; `
-    +`📝 Clocked out without End-of-Day report → <strong style="color:var(--red)">-${s.eodPenalty} pts</strong>`;
+    +`📝 Clocked out without End-of-Day report → <strong style="color:var(--red)">-${s.eodPenalty} pts</strong><br>`
+    +`🚪 Clocked out before <strong>${fmtTime12(s.clockOutExpectedTime)}</strong> → <strong style="color:var(--red)">-${s.earlyClockOutPenalty} pts</strong> &nbsp;|&nbsp; `
+    +`🏖️ Full Day Absence (unapproved) → <strong style="color:var(--red)">-${s.absentFullDayPenalty} pts</strong> &nbsp;|&nbsp; `
+    +`🌗 Half Day Absence → <strong style="color:var(--red)">-${s.absentHalfDayPenalty} pts</strong>`;
 }
 
 function fmtTime12(hhmm){
@@ -2735,6 +2765,10 @@ function saveMeritSettings(){
     attCutoffTime:document.getElementById('ms_attTime').value||'11:30',
     attPenalty:parseFloat(document.getElementById('ms_attPenalty').value)||0,
     eodPenalty:parseFloat(document.getElementById('ms_eodPenalty').value)||0,
+    clockOutExpectedTime:document.getElementById('ms_clockOutTime').value||'16:00',
+    earlyClockOutPenalty:parseFloat(document.getElementById('ms_earlyOutPenalty').value)||0,
+    absentFullDayPenalty:parseFloat(document.getElementById('ms_absentFullPenalty').value)||0,
+    absentHalfDayPenalty:parseFloat(document.getElementById('ms_absentHalfPenalty').value)||0,
   };
   DB.set('meritSettings',s);
   const msg=document.getElementById('ms_msg');
@@ -2744,7 +2778,7 @@ function saveMeritSettings(){
 
 function loadMeritSettingsIntoForm(){
   const s=getMeritSettings();
-  const map={ms_loginTime:'loginExpectedTime',ms_loginGrace:'loginGraceMin',ms_loginPenalty:'loginPenalty',ms_attTime:'attCutoffTime',ms_attPenalty:'attPenalty',ms_eodPenalty:'eodPenalty'};
+  const map={ms_loginTime:'loginExpectedTime',ms_loginGrace:'loginGraceMin',ms_loginPenalty:'loginPenalty',ms_attTime:'attCutoffTime',ms_attPenalty:'attPenalty',ms_eodPenalty:'eodPenalty',ms_clockOutTime:'clockOutExpectedTime',ms_earlyOutPenalty:'earlyClockOutPenalty',ms_absentFullPenalty:'absentFullDayPenalty',ms_absentHalfPenalty:'absentHalfDayPenalty'};
   Object.entries(map).forEach(([elId,key])=>{const el=document.getElementById(elId);if(el)el.value=s[key];});
 }
 
@@ -2767,6 +2801,19 @@ async function checkLateLoginMerit(teacherId,name,sid,dateStr,clockInDate){
     return {late:true,penalty:s.loginPenalty};
   }
   return {late:false};
+}
+
+// Called right after a teacher clocks OUT via QR — penalizes leaving before expected time
+async function checkEarlyClockOutMerit(teacherId,name,sid,dateStr,clockOutDate){
+  const s=getMeritSettings();
+  const [h,m]=s.clockOutExpectedTime.split(':').map(Number);
+  const expected=new Date(clockOutDate);expected.setHours(h,m,0,0);
+  if(clockOutDate<expected){
+    const reason=`Clocked out at ${clockOutDate.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true})} — expected no earlier than ${fmtTime12(s.clockOutExpectedTime)}`;
+    await logMeritDeduction(teacherId,name,sid,dateStr,'early_clockout',s.earlyClockOutPenalty,reason);
+    return {early:true,penalty:s.earlyClockOutPenalty};
+  }
+  return {early:false};
 }
 
 // Daily sweep — checks if each teacher's class attendance was marked by the cutoff time.
@@ -2823,8 +2870,8 @@ function renderMerit(){
 
   const merits=(DB.get('meritPoints')||[]).filter(m=>m.date>=startStr&&m.date<=endStr);
   const feedbacks=DB.get('meritFeedback')||[];
-  const catIcon={late_login:'⏰',missing_attendance:'📋',missing_eod:'📝'};
-  const catLabel={late_login:'Late Login',missing_attendance:'Missing Attendance',missing_eod:'Missing EOD'};
+  const catIcon={late_login:'⏰',missing_attendance:'📋',missing_eod:'📝',early_clockout:'🚪',absent_full:'🏖️',absent_half:'🌗'};
+  const catLabel={late_login:'Late Login',missing_attendance:'Missing Attendance',missing_eod:'Missing EOD',early_clockout:'Early Clock-Out',absent_full:'Full Day Absence',absent_half:'Half Day Absence'};
 
   if(isTeacherViewer){
     adminView.style.display='none';
@@ -2870,21 +2917,22 @@ function renderMerit(){
     myView.style.display='none';
     const teachers=(DB.get('teachers')||[]).filter(t=>t.status==='Active');
     const tbody=document.getElementById('meritTableBody');
-    if(!teachers.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text3)">No active teachers.</td></tr>';return;}
+    if(!teachers.length){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text3)">No active teachers.</td></tr>';return;}
 
     tbody.innerHTML=teachers.map(t=>{
       const tm=merits.filter(m=>m.tid===t.id);
-      const lateLogin=tm.filter(m=>m.category==='late_login').reduce((s,m)=>s+m.points,0);
-      const missAtt=tm.filter(m=>m.category==='missing_attendance').reduce((s,m)=>s+m.points,0);
-      const missEod=tm.filter(m=>m.category==='missing_eod').reduce((s,m)=>s+m.points,0);
-      const total=lateLogin+missAtt+missEod;
+      const total=tm.reduce((s,m)=>s+m.points,0);
       const totalColor=total===0?'var(--green)':total<=3?'var(--gold)':'var(--red)';
+      // Group by category to show compact badges like "⏰×2  🏖️×1"
+      const byCat={};
+      tm.forEach(m=>{byCat[m.category]=(byCat[m.category]||0)+1;});
+      const badges=Object.entries(byCat).map(([cat,count])=>
+        `<span style="background:var(--bg3);border-radius:6px;padding:0.15rem 0.5rem;font-size:0.76rem;font-weight:700;color:var(--text2);margin-right:0.3rem;white-space:nowrap;display:inline-block;margin-bottom:0.2rem;" title="${catLabel[cat]||cat}">${catIcon[cat]||'⚠️'}×${count}</span>`
+      ).join('');
       return `<tr>
         <td><strong>${t.name}</strong><br><small style="color:var(--text3)">${t.sid||''}</small></td>
         <td><span class="badge b-blue">${t.class}</span></td>
-        <td style="text-align:center;color:${lateLogin?'var(--red)':'var(--text3)'};font-weight:700">${lateLogin?'-'+lateLogin:'0'}</td>
-        <td style="text-align:center;color:${missAtt?'var(--red)':'var(--text3)'};font-weight:700">${missAtt?'-'+missAtt:'0'}</td>
-        <td style="text-align:center;color:${missEod?'var(--red)':'var(--text3)'};font-weight:700">${missEod?'-'+missEod:'0'}</td>
+        <td>${badges||'<span style="color:var(--text3);font-size:0.8rem">None 🎉</span>'}</td>
         <td style="text-align:center;font-family:'Fredoka One',cursive;color:${totalColor};font-size:1.1rem;">-${total}</td>
         <td><button class="btn btn-xs btn-primary" onclick="toggleMeritDetail(${t.id},'${startStr}')">Details</button></td>
       </tr>`;
@@ -2901,8 +2949,8 @@ function toggleMeritDetail(tid,weekStart){
   if(!t){area.innerHTML='';return;}
   const {end}=getWeekRange(weekStart);
   const endStr=end.toISOString().slice(0,10);
-  const catIcon={late_login:'⏰',missing_attendance:'📋',missing_eod:'📝'};
-  const catLabel={late_login:'Late Login',missing_attendance:'Missing Attendance',missing_eod:'Missing EOD'};
+  const catIcon={late_login:'⏰',missing_attendance:'📋',missing_eod:'📝',early_clockout:'🚪',absent_full:'🏖️',absent_half:'🌗'};
+  const catLabel={late_login:'Late Login',missing_attendance:'Missing Attendance',missing_eod:'Missing EOD',early_clockout:'Early Clock-Out',absent_full:'Full Day Absence',absent_half:'Half Day Absence'};
   const mine=(DB.get('meritPoints')||[]).filter(m=>m.tid===tid&&m.date>=weekStart&&m.date<=endStr).sort((a,b)=>a.date.localeCompare(b.date));
   const feedbacks=DB.get('meritFeedback')||[];
   const fb=feedbacks.find(f=>f.tid===tid&&f.weekStart===weekStart);
@@ -3080,7 +3128,23 @@ function saveTAtt(){
     const t=teachers.find(x=>x.id==tid);
     att.push({tid:+tid,name:t?.name||'',desig:t?.desig||'',date,status});
   });
-  DB.set('tAtt',att);showToast('Teacher attendance saved ✅','success');
+  DB.set('tAtt',att);
+  checkAbsenceMerit(date); // deduct points for unapproved full/half day absences
+  showToast('Teacher attendance saved ✅','success');
+}
+
+// Deducts merit points when a teacher is marked Absent (full day) or Half Day.
+// Idempotent — logMeritDeduction skips if already logged for that date/category.
+async function checkAbsenceMerit(dateStr){
+  const s=getMeritSettings();
+  const records=(DB.get('tAtt')||[]).filter(a=>a.date===dateStr);
+  for(const r of records){
+    if(r.status==='Absent'){
+      await logMeritDeduction(r.tid,r.name,null,dateStr,'absent_full',s.absentFullDayPenalty,`Marked absent (full day) on ${dateStr}`);
+    } else if(r.status==='Half Day'){
+      await logMeritDeduction(r.tid,r.name,null,dateStr,'absent_half',s.absentHalfDayPenalty,`Marked half day on ${dateStr}`);
+    }
+  }
 }
 
 // ═══════════════════════════════
@@ -4366,16 +4430,22 @@ async function finalizeClockOut(withEOD){
   });
   DB.set('tSessions',sessions);
 
+  const earlyInfo=await checkEarlyClockOutMerit(qrSelectedTeacher.id,qrSelectedTeacher.name,teacherRec?.sid,dateStr,now);
+
   const box=document.getElementById('qrAttendBox');
   const noteHtml=eodMissing
     ? `<div style="background:#FEF2F2;border:1.5px solid #FCA5A5;border-radius:10px;padding:0.7rem 1rem;margin-top:0.8rem;font-size:0.8rem;color:#DC2626;font-weight:700;">⚠️ EOD report skipped — <strong>-${getMeritSettings().eodPenalty} merit points</strong></div>`
     : `<div style="background:var(--green-lt);border:1.5px solid rgba(16,185,129,0.3);border-radius:10px;padding:0.7rem 1rem;margin-top:0.8rem;font-size:0.8rem;color:var(--green);font-weight:700;">✅ End-of-day report submitted — thank you!</div>`;
+  const earlyHtml=earlyInfo.early
+    ? `<div style="background:#FEF2F2;border:1.5px solid #FCA5A5;border-radius:10px;padding:0.7rem 1rem;margin-top:0.6rem;font-size:0.8rem;color:#DC2626;font-weight:700;">🚪 Left before ${fmtTime12(getMeritSettings().clockOutExpectedTime)} — <strong>-${earlyInfo.penalty} merit points</strong></div>`
+    : '';
   box.innerHTML=`<div style="background:var(--red-lt);border:2px solid rgba(239,68,68,0.3);border-radius:16px;padding:2rem;text-align:center;">
     <div style="font-size:3.5rem;margin-bottom:0.5rem">🔴</div>
     <div style="font-family:'Fredoka One',cursive;font-size:1.5rem;color:var(--red);">Clocked Out Successfully</div>
     <div style="font-size:1rem;font-weight:700;color:var(--text);margin:0.5rem 0">${qrSelectedTeacher.name}</div>
     <div style="font-size:0.85rem;color:var(--text3);">${now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true})} · ${now.toLocaleDateString('en-IN')}</div>
     ${noteHtml}
+    ${earlyHtml}
     <button class="btn btn-primary" style="margin-top:1.2rem;width:100%" onclick="resetQRAttend()">← Back (Next Person)</button>
   </div>`;
 }
