@@ -1182,62 +1182,62 @@ tbody td strong{color:var(--text);font-weight:700;}
       <!-- ── MERIT POINTS ── -->
       <div class="panel" id="panel-merit">
         <div class="sec-hd">
-          <div class="sec-title">🏅 Teacher Merit &amp; EOD Reports</div>
+          <div class="sec-title">🏅 Teacher Merit Points</div>
           <div class="sec-actions">
             <input type="date" id="meritWeekPick" class="f-sel" style="width:auto" onchange="renderMerit();renderEODReports();">
             <span id="meritWeekLabel" style="font-size:0.82rem;font-weight:700;color:var(--text2);align-self:center;background:var(--bg3);padding:0.4rem 0.8rem;border-radius:8px;"></span>
           </div>
         </div>
 
-        <div class="pill-tabs">
-          <button class="pill-tab active" id="mtab-points" onclick="switchMeritTab('points')">🏅 Merit Points</button>
-          <button class="pill-tab" id="mtab-eod" onclick="switchMeritTab('eod')">📝 EOD Reports</button>
+        <!-- Rules banner -->
+        <div style="background:linear-gradient(135deg,rgba(139,92,246,0.08),rgba(59,130,246,0.06));border:1.5px solid rgba(139,92,246,0.2);border-radius:12px;padding:0.9rem 1.2rem;margin-bottom:1.2rem;font-size:0.82rem;color:var(--text2);line-height:1.8;">
+          <strong>📋 Point Deduction Rules:</strong><br>
+          <span id="meritRulesText"></span>
         </div>
 
-        <!-- ═══ MERIT POINTS TAB ═══ -->
-        <div id="merit-tab-points">
-          <!-- Rules banner -->
-          <div style="background:linear-gradient(135deg,rgba(139,92,246,0.08),rgba(59,130,246,0.06));border:1.5px solid rgba(139,92,246,0.2);border-radius:12px;padding:0.9rem 1.2rem;margin-bottom:1.2rem;font-size:0.82rem;color:var(--text2);line-height:1.8;">
-            <strong>📋 Point Deduction Rules:</strong><br>
-            <span id="meritRulesText"></span>
-          </div>
-
-          <!-- ADMIN / PRINCIPAL VIEW -->
-          <div id="meritAdminView" style="display:none;">
-            <div class="card"><div class="tbl-wrap">
-              <table>
-                <thead><tr>
-                  <th>Teacher</th><th>Class</th><th>⏰ Late Login</th><th>📋 Missing Attendance</th><th>📝 Missing EOD</th><th>Total Deducted</th><th></th>
-                </tr></thead>
-                <tbody id="meritTableBody"></tbody>
-              </table>
-            </div></div>
-            <div id="meritDetailArea" style="margin-top:1.2rem;"></div>
-          </div>
-
-          <!-- TEACHER'S OWN VIEW -->
-          <div id="meritMyView" style="display:none;"></div>
+        <!-- ADMIN / PRINCIPAL VIEW -->
+        <div id="meritAdminView" style="display:none;">
+          <div class="card"><div class="tbl-wrap">
+            <table>
+              <thead><tr>
+                <th>Teacher</th><th>Class</th><th>⏰ Late Login</th><th>📋 Missing Attendance</th><th>📝 Missing EOD</th><th>Total Deducted</th><th></th>
+              </tr></thead>
+              <tbody id="meritTableBody"></tbody>
+            </table>
+          </div></div>
+          <div id="meritDetailArea" style="margin-top:1.2rem;"></div>
         </div>
 
-        <!-- ═══ EOD REPORTS TAB ═══ -->
-        <div id="merit-tab-eod" style="display:none;">
-          <div style="background:var(--blue-lt);border:1.5px solid rgba(59,130,246,0.2);border-radius:12px;padding:0.9rem 1.2rem;margin-bottom:1.2rem;font-size:0.82rem;color:var(--text2);">
-            📝 What each teacher reported doing at the end of their day this week. Missing entries mean they skipped the report (and lost merit points for it).
-          </div>
+        <!-- TEACHER'S OWN VIEW -->
+        <div id="meritMyView" style="display:none;"></div>
+      </div>
 
-          <!-- ADMIN / PRINCIPAL VIEW: everyone's reports -->
-          <div id="eodAdminView" style="display:none;">
-            <div style="margin-bottom:1rem;">
-              <select class="f-sel" id="eodTeacherFilter" style="width:auto" onchange="renderEODReports()">
-                <option value="">All Teachers</option>
-              </select>
-            </div>
-            <div id="eodListArea"></div>
+      <!-- ── EOD REPORTS (separate tab) ── -->
+      <div class="panel" id="panel-eod">
+        <div class="sec-hd">
+          <div class="sec-title">📝 End of Day Reports</div>
+          <div class="sec-actions">
+            <input type="date" id="eodWeekPick" class="f-sel" style="width:auto" onchange="renderEODReports()">
+            <span id="eodWeekLabel" style="font-size:0.82rem;font-weight:700;color:var(--text2);align-self:center;background:var(--bg3);padding:0.4rem 0.8rem;border-radius:8px;"></span>
           </div>
-
-          <!-- TEACHER'S OWN VIEW: their own report history -->
-          <div id="eodMyView" style="display:none;"></div>
         </div>
+
+        <div style="background:var(--blue-lt);border:1.5px solid rgba(59,130,246,0.2);border-radius:12px;padding:0.9rem 1.2rem;margin-bottom:1.2rem;font-size:0.82rem;color:var(--text2);">
+          📝 What each teacher reported doing at the end of their day. Missing entries mean they skipped the report (and lost merit points for it).
+        </div>
+
+        <!-- ADMIN / PRINCIPAL VIEW: everyone's reports -->
+        <div id="eodAdminView" style="display:none;">
+          <div style="margin-bottom:1rem;">
+            <select class="f-sel" id="eodTeacherFilter" style="width:auto" onchange="renderEODReports()">
+              <option value="">All Teachers</option>
+            </select>
+          </div>
+          <div id="eodListArea"></div>
+        </div>
+
+        <!-- TEACHER'S OWN VIEW: submission form + report history -->
+        <div id="eodMyView" style="display:none;"></div>
       </div>
 
       <!-- ── BACKUP ── -->
@@ -1884,6 +1884,7 @@ const NAV={
     {id:'tatt',icon:'📝',label:'Teacher Attendance'},
     {id:'qrstation',icon:'📡',label:'QR Station'},
     {id:'merit',icon:'🏅',label:'Merit Points'},
+    {id:'eod',icon:'📝',label:'EOD Reports'},
     {id:'fees',icon:'💰',label:'Fee Management'},
     {id:'expenses',icon:'🧾',label:'Expenses'},
     {id:'reports',icon:'📈',label:'Reports'},
@@ -1901,6 +1902,7 @@ const NAV={
     {id:'tatt',icon:'📝',label:'Teacher Attendance'},
     {id:'qrstation',icon:'📡',label:'QR Station'},
     {id:'merit',icon:'🏅',label:'Merit Points'},
+    {id:'eod',icon:'📝',label:'EOD Reports'},
     {id:'fees',icon:'💰',label:'Fee Management'},
     {id:'reports',icon:'📈',label:'Reports'},
     {id:'idcards',icon:'🪪',label:'ID Cards'},
@@ -1910,11 +1912,12 @@ const NAV={
     {id:'enquiries',icon:'📋',label:'Enquiries'},
     {id:'students',icon:'👦',label:'My Students'},
     {id:'satt',icon:'✅',label:'Student Attendance'},
+    {id:'eod',icon:'📝',label:'📝 EOD Report'},
     {id:'merit',icon:'🏅',label:'My Merit Points'},
   ]
 };
 
-const PANEL_TITLES={dashboard:'Dashboard',enquiries:'Admission Enquiries',admissions:'Admissions',students:'Student Management',teachers:'Teacher Management',satt:'Student Attendance',tatt:'Teacher Attendance',fees:'Fee Management',expenses:'Expense Tracker',reports:'Reports & Downloads',idcards:'🪪 ID Cards',qrstation:'📡 QR Attendance Station',merit:'🏅 Merit Points',backup:'Backup & Restore',settings:'Settings'};
+const PANEL_TITLES={dashboard:'Dashboard',enquiries:'Admission Enquiries',admissions:'Admissions',students:'Student Management',teachers:'Teacher Management',satt:'Student Attendance',tatt:'Teacher Attendance',fees:'Fee Management',expenses:'Expense Tracker',reports:'Reports & Downloads',idcards:'🪪 ID Cards',qrstation:'📡 QR Attendance Station',merit:'🏅 Merit Points',eod:'📝 End of Day Reports',backup:'Backup & Restore',settings:'Settings'};
 
 function initApp(){
   // sidebar user info
@@ -1969,7 +1972,8 @@ function showPanel(id){
     satt:renderSAtt,
     tatt:()=>{renderTAtt();populateTAttHistTeachers();},
     qrstation:renderQRStation,
-    merit:()=>{renderMerit();renderEODReports();},
+    merit:renderMerit,
+    eod:renderEODReports,
     fees:()=>{populateFeeStudents();renderFees();renderFeeSummary();},
     expenses:()=>{renderExpenses();renderExpSummary();},
     reports:()=>renderRepAtt(),
@@ -2802,14 +2806,6 @@ function getWeekRange(dateStr){
 function fmtDateShort(d){return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});}
 
 // ─── Main Merit Points panel render ───
-function switchMeritTab(tab){
-  document.getElementById('merit-tab-points').style.display=tab==='points'?'':'none';
-  document.getElementById('merit-tab-eod').style.display=tab==='eod'?'':'none';
-  document.getElementById('mtab-points').classList.toggle('active',tab==='points');
-  document.getElementById('mtab-eod').classList.toggle('active',tab==='eod');
-  if(tab==='eod') renderEODReports();
-}
-
 function renderMerit(){
   const rulesEl=document.getElementById('meritRulesText');
   if(rulesEl) rulesEl.innerHTML=meritRulesText();
@@ -2951,10 +2947,12 @@ function renderEODReports(){
   const myView=document.getElementById('eodMyView');
   if(!adminView||!myView) return; // panel not yet rendered
 
-  const wkInput=document.getElementById('meritWeekPick');
+  const wkInput=document.getElementById('eodWeekPick');
   if(wkInput&&!wkInput.value) wkInput.value=new Date().toISOString().slice(0,10);
   const {start,end}=getWeekRange(wkInput?wkInput.value:null);
   const startStr=start.toISOString().slice(0,10),endStr=end.toISOString().slice(0,10);
+  const lbl=document.getElementById('eodWeekLabel');
+  if(lbl) lbl.textContent=`Week: ${fmtDateShort(start)} – ${fmtDateShort(end)}`;
 
   const allReports=(DB.get('eodReports')||[]).filter(r=>r.date>=startStr&&r.date<=endStr);
 
@@ -2963,12 +2961,44 @@ function renderEODReports(){
     myView.style.display='block';
     const me=getMyTeacherRecord();
     if(!me){myView.innerHTML='<div class="empty"><div class="ei">📝</div><p>Staff record not found.</p></div>';return;}
+
+    const today=new Date().toISOString().slice(0,10);
     const mine=allReports.filter(r=>r.tid===me.id).sort((a,b)=>b.date.localeCompare(a.date));
+    const todaysReport=mine.find(r=>r.date===today);
+
+    // ── Submission form (always at top) ──
+    let formHtml;
+    if(todaysReport && !window._eodEditing){
+      formHtml=`<div class="card" style="padding:1.2rem 1.4rem;margin-bottom:1.2rem;border:2px solid rgba(16,185,129,0.3);background:var(--green-lt);">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="font-weight:800;color:var(--green);font-size:0.9rem;">✅ Today's report submitted</div>
+          <button class="btn btn-xs btn-ghost" onclick="window._eodEditing=true;renderEODReports();">✏️ Edit</button>
+        </div>
+        <div style="font-size:0.83rem;color:var(--text2);line-height:1.7;white-space:pre-wrap;margin-top:0.6rem;">${todaysReport.summary}</div>
+      </div>`;
+    } else {
+      const prefill = todaysReport ? parseEODSummaryToFields(todaysReport.summary) : {activities:'',students:'',parents:'',tomorrow:'',notes:''};
+      formHtml=`<div class="card" style="padding:1.3rem 1.4rem;margin-bottom:1.2rem;">
+        <div style="font-weight:800;color:var(--primary);font-size:0.95rem;margin-bottom:0.2rem;">📝 Submit Today's End-of-Day Report</div>
+        <div style="font-size:0.78rem;color:var(--text3);margin-bottom:0.4rem;">📅 ${today}</div>
+        ${buildEODFormFields('peod')}
+        <button class="btn btn-green" style="width:100%;justify-content:center;margin-top:1rem;" onclick="submitEODFromPanel()">✅ Submit Report</button>
+        ${todaysReport?`<button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:0.5rem;" onclick="window._eodEditing=false;renderEODReports();">Cancel</button>`:''}
+      </div>`;
+      // schedule prefill after DOM insert
+      setTimeout(()=>{
+        ['activities','students','parents','tomorrow','notes'].forEach(k=>{
+          const el=document.getElementById('peod_'+k);
+          if(el) el.value=prefill[k]||'';
+        });
+      },0);
+    }
+
     if(!mine.length){
-      myView.innerHTML='<div class="empty"><div class="ei">📝</div><p>You haven\'t submitted any EOD reports this week yet.</p></div>';
+      myView.innerHTML=formHtml+'<div class="empty"><div class="ei">📝</div><p>No reports submitted yet this week.</p></div>';
       return;
     }
-    myView.innerHTML=mine.map(r=>`
+    myView.innerHTML=formHtml+mine.map(r=>`
       <div class="card" style="padding:1.1rem 1.3rem;margin-bottom:0.8rem;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
           <span style="font-weight:800;color:var(--primary);font-size:0.88rem;">📅 ${r.date}</span>
@@ -4224,13 +4254,87 @@ async function finalizeClockIn(){
 function showEODForm(){
   const box=document.getElementById('qrAttendBox');
   clearInterval(window._qrClockInterval);
-  box.innerHTML=`<div style="text-align:left;">
+  box.innerHTML=`<div style="text-align:left;max-height:80vh;overflow-y:auto;">
     <div style="font-family:'Fredoka One',cursive;font-size:1.3rem;color:var(--text);text-align:center;margin-bottom:0.3rem;">📝 End of Day Report</div>
-    <div style="font-size:0.82rem;color:var(--text3);text-align:center;margin-bottom:1.2rem;">Hi ${qrSelectedTeacher.name}, before you clock out — what did you do today?</div>
-    <textarea id="eodText" rows="5" placeholder="e.g. Completed alphabet activity with Playgroup, updated 3 parents about progress, prepared craft materials for tomorrow..." style="width:100%;padding:0.8rem;border:2px solid var(--border);border-radius:12px;font-family:inherit;font-size:0.88rem;resize:vertical;box-sizing:border-box;"></textarea>
+    <div style="font-size:0.82rem;color:var(--text3);text-align:center;margin-bottom:1.2rem;">Hi ${qrSelectedTeacher.name}, quickly fill this before you clock out</div>
+    ${buildEODFormFields('qeod')}
     <button class="btn btn-green" style="width:100%;justify-content:center;margin-top:1rem;" onclick="finalizeClockOut(true)">✅ Submit & Clock Out</button>
     <button style="width:100%;margin-top:0.7rem;background:none;border:none;color:var(--text3);font-size:0.76rem;text-decoration:underline;cursor:pointer;padding:0.4rem;" onclick="finalizeClockOut(false)">Skip without report (−${getMeritSettings().eodPenalty} points)</button>
   </div>`;
+}
+
+// Shared structured EOD form fields — used both in QR clock-out flow and the standalone panel form.
+// idPrefix keeps element IDs unique between the two contexts (e.g. 'qeod' vs 'peod').
+function buildEODFormFields(idPrefix){
+  const fieldStyle='width:100%;padding:0.65rem 0.8rem;border:2px solid var(--border);border-radius:10px;font-family:inherit;font-size:0.85rem;resize:vertical;box-sizing:border-box;margin-top:0.3rem;';
+  const labelStyle='font-size:0.8rem;font-weight:700;color:var(--text2);display:block;margin-top:0.9rem;';
+  return `
+    <label style="${labelStyle}margin-top:0;">📚 What did you teach / activities done today? <span class="req">*</span></label>
+    <textarea id="${idPrefix}_activities" rows="2" placeholder="e.g. Alphabet recognition with Playgroup, story time, outdoor play" style="${fieldStyle}"></textarea>
+
+    <label style="${labelStyle}">👶 Any student highlights or concerns?</label>
+    <textarea id="${idPrefix}_students" rows="2" placeholder="e.g. Aarav had a great day; Priya seemed unwell in the afternoon" style="${fieldStyle}"></textarea>
+
+    <label style="${labelStyle}">👨‍👩‍👧 Parent communication today?</label>
+    <textarea id="${idPrefix}_parents" rows="2" placeholder="e.g. Called Rohan's mother about his progress" style="${fieldStyle}"></textarea>
+
+    <label style="${labelStyle}">📦 Prepared / planned for tomorrow?</label>
+    <textarea id="${idPrefix}_tomorrow" rows="2" placeholder="e.g. Craft materials ready, revised lesson plan for Kg-1" style="${fieldStyle}"></textarea>
+
+    <label style="${labelStyle}">⚠️ Any incidents or notes for management? <span style="font-weight:400;color:var(--text3)">(optional)</span></label>
+    <textarea id="${idPrefix}_notes" rows="2" placeholder="e.g. Ran out of art supplies, need restock" style="${fieldStyle}"></textarea>
+  `;
+}
+
+// Reads the 5 structured fields and combines them into one formatted summary string for storage.
+function collectEODFormText(idPrefix){
+  const get=id=>(document.getElementById(idPrefix+'_'+id)?.value||'').trim();
+  const activities=get('activities'), students=get('students'), parents=get('parents'), tomorrow=get('tomorrow'), notes=get('notes');
+  if(!activities) return null; // required field missing
+  let parts=[];
+  parts.push('📚 Activities: '+activities);
+  if(students) parts.push('👶 Student Notes: '+students);
+  if(parents) parts.push('👨‍👩‍👧 Parent Communication: '+parents);
+  if(tomorrow) parts.push('📦 Prepared for Tomorrow: '+tomorrow);
+  if(notes) parts.push('⚠️ Other Notes: '+notes);
+  return parts.join('\n\n');
+}
+
+// Reverses collectEODFormText's formatting so an existing report can be re-loaded into the form for editing.
+function parseEODSummaryToFields(summary){
+  const fields={activities:'',students:'',parents:'',tomorrow:'',notes:''};
+  if(!summary) return fields;
+  const map=[['📚 Activities: ','activities'],['👶 Student Notes: ','students'],['👨‍👩‍👧 Parent Communication: ','parents'],['📦 Prepared for Tomorrow: ','tomorrow'],['⚠️ Other Notes: ','notes']];
+  const blocks=summary.split('\n\n');
+  blocks.forEach(b=>{
+    for(const [prefix,key] of map){
+      if(b.startsWith(prefix)){fields[key]=b.slice(prefix.length);return;}
+    }
+    // Legacy free-text report (submitted before structured fields existed) — put it all in Activities
+    if(!fields.activities) fields.activities=b;
+  });
+  return fields;
+}
+
+// Standalone submission from the Merit Points panel (works whether or not the teacher uses QR clock-out)
+async function submitEODFromPanel(){
+  const text=collectEODFormText('peod');
+  if(!text){showToast('Please fill in "What did you teach today" at least','error');return;}
+  const me=getMyTeacherRecord();
+  if(!me){showToast('Staff record not found','error');return;}
+  const today=new Date().toISOString().slice(0,10);
+  const reports=await getFreshCollection('eodReports');
+  const idx=reports.findIndex(r=>r.tid===me.id&&r.date===today);
+  if(idx>=0){
+    reports[idx].summary=text;
+    reports[idx].ts=new Date().toISOString();
+  } else {
+    reports.push({id:Date.now(),tid:me.id,name:me.name,sid:me.sid||'',date:today,summary:text,ts:new Date().toISOString()});
+  }
+  DB.set('eodReports',reports);
+  window._eodEditing=false;
+  renderEODReports();
+  showToast('EOD report submitted ✅','success');
 }
 
 async function finalizeClockOut(withEOD){
@@ -4240,8 +4344,8 @@ async function finalizeClockOut(withEOD){
   let eodMissing=false;
 
   if(withEOD){
-    const text=(document.getElementById('eodText')?.value||'').trim();
-    if(!text){showToast('Please write a short summary, or tap Skip below','error');return;}
+    const text=collectEODFormText('qeod');
+    if(!text){showToast('Please fill in at least "What did you teach today", or tap Skip below','error');return;}
     const reports=await getFreshCollection('eodReports');
     reports.push({id:Date.now(),tid:qrSelectedTeacher.id,name:qrSelectedTeacher.name,sid:teacherRec?.sid||'',date:dateStr,summary:text,ts:now.toISOString()});
     DB.set('eodReports',reports);
