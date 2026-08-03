@@ -1198,7 +1198,13 @@ tbody td strong{color:var(--text);font-weight:700;}
           <span id="meritRulesText"></span>
         </div>
 
-        <!-- ADMIN / PRINCIPAL VIEW -->
+        <!-- Tabs: Weekly Points vs Overall Performance (admin/principal only) -->
+        <div class="pill-tabs" id="meritViewTabs" style="display:none;margin-bottom:1.2rem;">
+          <button class="pill-tab active" id="mvtab-weekly" onclick="switchMeritView('weekly')">📅 Weekly Points</button>
+          <button class="pill-tab" id="mvtab-overall" onclick="switchMeritView('overall')">📊 Overall Performance</button>
+        </div>
+
+        <!-- ADMIN / PRINCIPAL VIEW: Weekly -->
         <div id="meritAdminView" style="display:none;">
           <div class="card"><div class="tbl-wrap">
             <table>
@@ -1209,6 +1215,19 @@ tbody td strong{color:var(--text);font-weight:700;}
             </table>
           </div></div>
           <div id="meritDetailArea" style="margin-top:1.2rem;"></div>
+        </div>
+
+        <!-- ADMIN / PRINCIPAL VIEW: Overall Performance Report Card -->
+        <div id="meritOverallView" style="display:none;">
+          <div style="display:flex;gap:0.7rem;align-items:center;margin-bottom:1.2rem;flex-wrap:wrap;">
+            <select class="f-sel" id="ovPeriod" style="width:auto" onchange="renderOverallPerformance()">
+              <option value="30">Last 30 Days</option>
+              <option value="90">Last 90 Days</option>
+              <option value="365">Last 12 Months</option>
+            </select>
+            <span style="font-size:0.78rem;color:var(--text3);">Combines attendance, punctuality, EOD consistency & merit points into one report card per teacher.</span>
+          </div>
+          <div id="ovCardsArea" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1rem;"></div>
         </div>
 
         <!-- TEACHER'S OWN VIEW -->
@@ -1586,7 +1605,7 @@ tbody td strong{color:var(--text);font-weight:700;}
 <!-- MANUAL MERIT ENTRY MODAL (Admin only) -->
 <div class="modal-ov" id="manualMeritModal">
   <div class="modal" style="max-width:440px">
-    <div class="modal-hd"><div class="modal-title">✍️ Add Manual Merit Entry</div><button class="modal-x" onclick="closeModal('manualMeritModal')">✕</button></div>
+    <div class="modal-hd"><div class="modal-title" id="mmModalTitle">✍️ Add Manual Merit Entry</div><button class="modal-x" onclick="closeModal('manualMeritModal')">✕</button></div>
     <div class="modal-bd">
       <div style="background:var(--purple-lt);border-radius:10px;padding:0.7rem 1rem;margin-bottom:1rem;font-size:0.8rem;color:var(--text2);">
         ✍️ Use this to give a bonus for great work, or apply an extra deduction for something not covered by the automatic rules.
@@ -1610,7 +1629,7 @@ tbody td strong{color:var(--text);font-weight:700;}
     </div>
     <div class="modal-ft">
       <button class="btn btn-ghost" onclick="closeModal('manualMeritModal')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveManualMeritEntry()">💾 Save Entry</button>
+      <button class="btn btn-primary" id="mmSaveBtn" onclick="saveManualMeritEntry()">💾 Save Entry</button>
     </div>
   </div>
 </div>
@@ -2914,15 +2933,41 @@ function meritNetEffect(m){
 // ═══════════════════════════════
 //  MANUAL MERIT ENTRY (Admin only)
 // ═══════════════════════════════
+let editingMeritEntryId=null; // null = adding new, otherwise editing this entry's id
+
 function openManualMeritModal(){
   if(!isAdmin()){showToast('Only Admin can add manual merit entries','error');return;}
+  editingMeritEntryId=null;
+  document.getElementById('mmModalTitle').textContent='✍️ Add Manual Merit Entry';
+  document.getElementById('mmSaveBtn').textContent='💾 Save Entry';
   const sel=document.getElementById('mm_teacher');
   const teachers=(DB.get('teachers')||[]).filter(t=>t.status==='Active');
   sel.innerHTML='<option value="">-- Select Teacher --</option>'+teachers.map(t=>`<option value="${t.id}">${t.name} (${t.sid||''})</option>`).join('');
+  sel.disabled=false;
   document.getElementById('mm_date').value=new Date().toISOString().slice(0,10);
   document.getElementById('mm_type').value='deduction';
   document.getElementById('mm_points').value='';
   document.getElementById('mm_reason').value='';
+  openModal('manualMeritModal');
+}
+
+function openEditMeritModal(entryId){
+  if(!isAdmin()){showToast('Only Admin can edit merit entries','error');return;}
+  const m=(DB.get('meritPoints')||[]).find(x=>x.id===entryId);
+  if(!m){showToast('Entry not found','error');return;}
+  editingMeritEntryId=entryId;
+  document.getElementById('mmModalTitle').textContent='✏️ Edit Merit Entry';
+  document.getElementById('mmSaveBtn').textContent='💾 Save Changes';
+  const sel=document.getElementById('mm_teacher');
+  const teachers=(DB.get('teachers')||[]).filter(t=>t.status==='Active');
+  sel.innerHTML=teachers.map(t=>`<option value="${t.id}">${t.name} (${t.sid||''})</option>`).join('');
+  sel.value=m.tid;
+  sel.disabled=true; // keep the same teacher when editing — avoid accidental reassignment
+  document.getElementById('mm_date').value=m.date;
+  document.getElementById('mm_type').value=m.type||'deduction';
+  document.getElementById('mm_points').value=m.points;
+  // Strip the auto-appended "(added by ...)" suffix for clean re-editing
+  document.getElementById('mm_reason').value=(m.reason||'').replace(/\s*\(added by .*?\)\s*$/,'').replace(/\s*\(edited by .*?\)\s*$/,'');
   openModal('manualMeritModal');
 }
 
@@ -2940,17 +2985,34 @@ async function saveManualMeritEntry(){
 
   const t=(DB.get('teachers')||[]).find(x=>x.id===tid);
   const list=await getFreshCollection('meritPoints');
-  list.push({
-    id:Date.now()+Math.floor(Math.random()*1000),
-    tid,name:t?.name||'',sid:t?.sid||'',date,
-    category:'manual',type,points,
-    reason:`${reason} (added by ${CU.name})`,
-    ts:new Date().toISOString(),
-  });
-  DB.set('meritPoints',list);
-  closeModal('manualMeritModal');
-  renderMerit();
-  showToast(`${type==='bonus'?'Bonus':'Deduction'} of ${points} points added ✅`,'success');
+
+  if(editingMeritEntryId){
+    const idx=list.findIndex(m=>m.id===editingMeritEntryId);
+    if(idx<0){showToast('Entry no longer exists','error');closeModal('manualMeritModal');return;}
+    list[idx]={
+      ...list[idx],
+      date,type,points,
+      reason:`${reason} (edited by ${CU.name})`,
+      ts:new Date().toISOString(),
+    };
+    DB.set('meritPoints',list);
+    closeModal('manualMeritModal');
+    editingMeritEntryId=null;
+    renderMerit();
+    showToast('Merit entry updated ✅','success');
+  } else {
+    list.push({
+      id:Date.now()+Math.floor(Math.random()*1000),
+      tid,name:t?.name||'',sid:t?.sid||'',date,
+      category:'manual',type,points,
+      reason:`${reason} (added by ${CU.name})`,
+      ts:new Date().toISOString(),
+    });
+    DB.set('meritPoints',list);
+    closeModal('manualMeritModal');
+    renderMerit();
+    showToast(`${type==='bonus'?'Bonus':'Deduction'} of ${points} points added ✅`,'success');
+  }
 }
 
 async function deleteManualMeritEntry(entryId,tid,weekStart){
@@ -2964,6 +3026,7 @@ async function deleteManualMeritEntry(entryId,tid,weekStart){
   toggleMeritDetail(tid,weekStart);
   showToast('Manual entry removed','info');
 }
+
 
 // Makes the QR scan the single source of truth for teacher attendance —
 // as soon as a teacher clocks IN, their attendance status for that day is
@@ -3013,27 +3076,60 @@ async function checkEarlyClockOutMerit(teacherId,name,sid,dateStr,clockOutDate){
 
 // Daily sweep — checks if each teacher's class attendance was marked by the cutoff time.
 // Safe to call repeatedly (idempotent) — only logs once per teacher per day.
+// Normalizes a class name for comparison (trims whitespace, ignores case)
+// so minor formatting differences never cause a false "not marked" result.
+function normClass(c){return (c||'').trim().toLowerCase();}
+
+// Returns today's date as a LOCAL calendar date string (not UTC) —
+// avoids off-by-one-day bugs that toISOString() can cause near midnight
+// depending on timezone.
+function todayLocalStr(){
+  const d=new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
 async function checkDailyAttendanceMerit(){
   try{
+    // Always try to self-heal first, regardless of time of day
+    await reconcileAttendanceMerit();
+
     const s=getMeritSettings();
     const now=new Date();
     const [ch,cm]=s.attCutoffTime.split(':').map(Number);
     const cutoff=new Date(now);cutoff.setHours(ch,cm,0,0);
-    if(now<cutoff) return; // not yet time to check
-    const today=now.toISOString().slice(0,10);
+    if(now<cutoff) return; // not yet time to check for NEW deductions
+    const today=todayLocalStr();
     const teachers=(DB.get('teachers')||[]).filter(t=>t.status==='Active'&&t.class&&t.class!=='All Classes');
     if(!teachers.length) return;
     const sAttToday=(DB.get('sAtt')||[]).filter(a=>a.date===today);
-    const markedClasses=new Set(sAttToday.map(a=>a.class));
+    const markedClasses=new Set(sAttToday.map(a=>normClass(a.class)));
     const existing=DB.get('meritPoints')||[];
     for(const t of teachers){
-      if(markedClasses.has(t.class)) continue;
+      if(markedClasses.has(normClass(t.class))) continue;
       const already=existing.some(m=>m.tid===t.id&&m.date===today&&m.category==='missing_attendance');
       if(already) continue;
       await logMeritDeduction(t.id,t.name,t.sid,today,'missing_attendance',s.attPenalty,
         `Student attendance for ${t.class} not marked by ${fmtTime12(s.attCutoffTime)}`);
     }
   }catch(e){console.warn('[TC] Merit attendance check failed:',e);}
+}
+
+async function reconcileAttendanceMerit(){
+  const merits=await getFreshCollection('meritPoints');
+  const missingEntries=merits.filter(m=>m.category==='missing_attendance');
+  if(!missingEntries.length) return;
+  const teachers=DB.get('teachers')||[];
+  const sAtt=DB.get('sAtt')||[];
+  let changed=false;
+  const kept=merits.filter(m=>{
+    if(m.category!=='missing_attendance') return true;
+    const t=teachers.find(x=>x.id===m.tid);
+    if(!t) return true;
+    const wasMarked=sAtt.some(a=>a.date===m.date&&normClass(a.class)===normClass(t.class));
+    if(wasMarked){changed=true;return false;} // remove — they did mark it, just late
+    return true;
+  });
+  if(changed) DB.set('meritPoints',kept);
 }
 
 // ─── Week helpers ───
@@ -3055,6 +3151,9 @@ function renderMerit(){
   if(manualBtn) manualBtn.style.display=isAdmin()?'':'none';
 
   const isTeacherViewer=CU&&CU.role==='teacher';
+  const viewTabs=document.getElementById('meritViewTabs');
+  if(viewTabs) viewTabs.style.display=isTeacherViewer?'none':'flex';
+
   const adminView=document.getElementById('meritAdminView');
   const myView=document.getElementById('meritMyView');
 
@@ -3141,6 +3240,85 @@ function renderMerit(){
 }
 
 let meritDetailOpenFor=null;
+
+function switchMeritView(view){
+  document.getElementById('mvtab-weekly').classList.toggle('active',view==='weekly');
+  document.getElementById('mvtab-overall').classList.toggle('active',view==='overall');
+  document.getElementById('meritAdminView').style.display=view==='weekly'?'block':'none';
+  document.getElementById('meritOverallView').style.display=view==='overall'?'block':'none';
+  if(view==='overall') renderOverallPerformance();
+}
+
+// Combines attendance rate, punctuality, EOD consistency, and merit points
+// into one report card per teacher — for reviewing overall performance and
+// responsibility (class assigned, designation) over a longer period.
+function renderOverallPerformance(){
+  const periodSel=document.getElementById('ovPeriod');
+  const days=parseInt(periodSel?periodSel.value:30)||30;
+  const endDate=new Date();
+  const startDate=new Date();startDate.setDate(endDate.getDate()-days);
+  const startStr=startDate.toISOString().slice(0,10),endStr=endDate.toISOString().slice(0,10);
+
+  const teachers=(DB.get('teachers')||[]).filter(t=>t.status==='Active');
+  const tAtt=(DB.get('tAtt')||[]).filter(a=>a.date>=startStr&&a.date<=endStr);
+  const sessions=(DB.get('tSessions')||[]).filter(s=>s.date>=startStr&&s.date<=endStr);
+  const eods=(DB.get('eodReports')||[]).filter(r=>r.date>=startStr&&r.date<=endStr);
+  const merits=(DB.get('meritPoints')||[]).filter(m=>m.date>=startStr&&m.date<=endStr);
+
+  const area=document.getElementById('ovCardsArea');
+  if(!teachers.length){area.innerHTML='<div class="empty"><div class="ei">📊</div><p>No active teachers.</p></div>';return;}
+
+  area.innerHTML=teachers.map(t=>{
+    const myAtt=tAtt.filter(a=>a.tid===t.id);
+    const workedDays=myAtt.length||1;
+    const presentDays=myAtt.filter(a=>a.status==='Present'||a.status==='Late').length;
+    const attendanceRate=Math.round((presentDays/workedDays)*100);
+
+    const myIns=sessions.filter(s=>s.tid===t.id&&s.type==='in');
+    const lateCount=merits.filter(m=>m.tid===t.id&&m.category==='late_login').length;
+    const punctualityRate=myIns.length?Math.round(((myIns.length-lateCount)/myIns.length)*100):100;
+
+    const myOuts=sessions.filter(s=>s.tid===t.id&&s.type==='out').length;
+    const myEods=eods.filter(r=>r.tid===t.id).length;
+    const eodRate=myOuts?Math.round((myEods/myOuts)*100):100;
+
+    const netPoints=merits.filter(m=>m.tid===t.id).reduce((s,m)=>s+meritNetEffect(m),0);
+
+    // Overall rating combines all 4 signals
+    const overallScore=(attendanceRate*0.3)+(punctualityRate*0.3)+(eodRate*0.2)+(Math.max(0,Math.min(100,100+netPoints*5))*0.2);
+    let ratingLabel,ratingColor;
+    if(overallScore>=85){ratingLabel='🌟 Excellent';ratingColor='var(--green)';}
+    else if(overallScore>=70){ratingLabel='✅ Good';ratingColor='var(--blue)';}
+    else if(overallScore>=50){ratingLabel='⚠️ Needs Improvement';ratingColor='var(--gold)';}
+    else{ratingLabel='🔴 Needs Attention';ratingColor='var(--red)';}
+
+    const barRow=(label,pct,color)=>`
+      <div style="margin-bottom:0.6rem;">
+        <div style="display:flex;justify-content:space-between;font-size:0.74rem;color:var(--text3);margin-bottom:2px;"><span>${label}</span><span style="font-weight:700;color:var(--text2)">${pct}%</span></div>
+        <div style="background:var(--bg3);border-radius:50px;height:6px;overflow:hidden;"><div style="width:${pct}%;height:100%;background:${color};"></div></div>
+      </div>`;
+
+    return `<div class="card" style="padding:1.3rem;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.9rem;">
+        <div>
+          <div style="font-weight:800;font-size:0.95rem;color:var(--text);">${t.name}</div>
+          <div style="font-size:0.76rem;color:var(--text3);">${t.desig} · <span class="badge b-blue" style="font-size:0.68rem;">${t.class}</span></div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-weight:800;font-size:0.8rem;color:${ratingColor};">${ratingLabel}</div>
+        </div>
+      </div>
+      ${barRow('📅 Attendance Rate',attendanceRate,'var(--green)')}
+      ${barRow('⏰ Punctuality Rate',punctualityRate,'var(--blue)')}
+      ${barRow('📝 EOD Submission Rate',eodRate,'var(--purple)')}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:0.8rem;padding-top:0.8rem;border-top:1px solid var(--border);">
+        <span style="font-size:0.76rem;color:var(--text3);">Net Merit Points (${days}d)</span>
+        <span style="font-family:'Fredoka One',cursive;font-size:1.1rem;color:${netPoints>=0?'var(--green)':'var(--red)'};">${netPoints>=0?'+':''}${netPoints}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 function toggleMeritDetail(tid,weekStart){
   const area=document.getElementById('meritDetailArea');
   if(meritDetailOpenFor===tid){meritDetailOpenFor=null;area.innerHTML='';return;}
@@ -3169,7 +3347,10 @@ function toggleMeritDetail(tid,weekStart){
           <div style="font-size:0.83rem;font-weight:700;">${catLabel[m.category]||m.category} <span style="color:${isBonus?'var(--green)':'var(--red)'};font-weight:800;">${isBonus?'+':'-'}${m.points}</span></div>
           <div style="font-size:0.75rem;color:var(--text3);">${m.reason} · ${m.date}</div>
         </div>
-        ${canDelete?`<button class="btn btn-xs btn-ghost" onclick="deleteManualMeritEntry(${m.id},${tid},'${weekStart}')" title="Remove this entry">✕</button>`:''}
+        ${canDelete?`<div style="display:flex;gap:0.3rem;flex-shrink:0;">
+          <button class="btn btn-xs btn-ghost" onclick="openEditMeritModal(${m.id})" title="Edit this entry">✏️</button>
+          <button class="btn btn-xs btn-ghost" onclick="deleteManualMeritEntry(${m.id},${tid},'${weekStart}')" title="Remove this entry">✕</button>
+        </div>`:''}
       </div>`;
     });
   }
