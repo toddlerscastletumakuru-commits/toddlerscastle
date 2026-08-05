@@ -1366,15 +1366,6 @@ tbody td strong{color:var(--text);font-weight:700;}
             </div>
             <div></div>
             <div>
-              <label class="f-lbl">Expected Clock-Out Time</label>
-              <input class="f-in" type="time" id="ms_clockOutTime" style="margin-top:0.3rem;">
-              <div style="font-size:0.72rem;color:var(--text3);margin-top:0.2rem;">Clocking out before this time is considered "early"</div>
-            </div>
-            <div>
-              <label class="f-lbl">Early Clock-Out Penalty (points)</label>
-              <input class="f-in" type="number" id="ms_earlyOutPenalty" min="0" style="margin-top:0.3rem;">
-            </div>
-            <div>
               <label class="f-lbl">Full Day Absence Penalty (points)</label>
               <input class="f-in" type="number" id="ms_absentFullPenalty" min="0" style="margin-top:0.3rem;">
               <div style="font-size:0.72rem;color:var(--text3);margin-top:0.2rem;">Applied when marked "Absent" in Teacher Attendance</div>
@@ -1955,7 +1946,6 @@ function initDB(){
     loginExpectedTime:'09:30', loginGraceMin:2, loginPenalty:2,
     attCutoffTime:'11:30', attPenalty:1,
     eodPenalty:2,
-    clockOutExpectedTime:'16:00', earlyClockOutPenalty:2,
     absentFullDayPenalty:5, absentHalfDayPenalty:3
   });
 }
@@ -2879,7 +2869,6 @@ function getMeritSettings(){
     loginExpectedTime:'09:30', loginGraceMin:2, loginPenalty:2,
     attCutoffTime:'11:30', attPenalty:1,
     eodPenalty:2,
-    clockOutExpectedTime:'16:00', earlyClockOutPenalty:2,
     absentFullDayPenalty:5, absentHalfDayPenalty:3
   };
 }
@@ -2889,7 +2878,6 @@ function meritRulesText(){
   return `⏰ Login after <strong>${fmtTime12(s.loginExpectedTime)}</strong> + ${s.loginGraceMin} min grace → <strong style="color:var(--red)">-${s.loginPenalty} pts</strong> &nbsp;|&nbsp; `
     +`📋 Student attendance not marked by <strong>${fmtTime12(s.attCutoffTime)}</strong> → <strong style="color:var(--red)">-${s.attPenalty} pt</strong> &nbsp;|&nbsp; `
     +`📝 Clocked out without End-of-Day report → <strong style="color:var(--red)">-${s.eodPenalty} pts</strong><br>`
-    +`🚪 Clocked out before <strong>${fmtTime12(s.clockOutExpectedTime)}</strong> → <strong style="color:var(--red)">-${s.earlyClockOutPenalty} pts</strong> &nbsp;|&nbsp; `
     +`🏖️ Full Day Absence (unapproved) → <strong style="color:var(--red)">-${s.absentFullDayPenalty} pts</strong> &nbsp;|&nbsp; `
     +`🌗 Half Day Absence → <strong style="color:var(--red)">-${s.absentHalfDayPenalty} pts</strong>`;
 }
@@ -2908,8 +2896,6 @@ function saveMeritSettings(){
     attCutoffTime:document.getElementById('ms_attTime').value||'11:30',
     attPenalty:parseFloat(document.getElementById('ms_attPenalty').value)||0,
     eodPenalty:parseFloat(document.getElementById('ms_eodPenalty').value)||0,
-    clockOutExpectedTime:document.getElementById('ms_clockOutTime').value||'16:00',
-    earlyClockOutPenalty:parseFloat(document.getElementById('ms_earlyOutPenalty').value)||0,
     absentFullDayPenalty:parseFloat(document.getElementById('ms_absentFullPenalty').value)||0,
     absentHalfDayPenalty:parseFloat(document.getElementById('ms_absentHalfPenalty').value)||0,
   };
@@ -2921,7 +2907,7 @@ function saveMeritSettings(){
 
 function loadMeritSettingsIntoForm(){
   const s=getMeritSettings();
-  const map={ms_loginTime:'loginExpectedTime',ms_loginGrace:'loginGraceMin',ms_loginPenalty:'loginPenalty',ms_attTime:'attCutoffTime',ms_attPenalty:'attPenalty',ms_eodPenalty:'eodPenalty',ms_clockOutTime:'clockOutExpectedTime',ms_earlyOutPenalty:'earlyClockOutPenalty',ms_absentFullPenalty:'absentFullDayPenalty',ms_absentHalfPenalty:'absentHalfDayPenalty'};
+  const map={ms_loginTime:'loginExpectedTime',ms_loginGrace:'loginGraceMin',ms_loginPenalty:'loginPenalty',ms_attTime:'attCutoffTime',ms_attPenalty:'attPenalty',ms_eodPenalty:'eodPenalty',ms_absentFullPenalty:'absentFullDayPenalty',ms_absentHalfPenalty:'absentHalfDayPenalty'};
   Object.entries(map).forEach(([elId,key])=>{const el=document.getElementById(elId);if(el)el.value=s[key];});
 }
 
@@ -3070,18 +3056,7 @@ async function checkLateLoginMerit(teacherId,name,sid,dateStr,clockInDate){
   return {late:false};
 }
 
-// Called right after a teacher clocks OUT via QR — penalizes leaving before expected time
-async function checkEarlyClockOutMerit(teacherId,name,sid,dateStr,clockOutDate){
-  const s=getMeritSettings();
-  const [h,m]=s.clockOutExpectedTime.split(':').map(Number);
-  const expected=new Date(clockOutDate);expected.setHours(h,m,0,0);
-  if(clockOutDate<expected){
-    const reason=`Clocked out at ${clockOutDate.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true})} — expected no earlier than ${fmtTime12(s.clockOutExpectedTime)}`;
-    await logMeritDeduction(teacherId,name,sid,dateStr,'early_clockout',s.earlyClockOutPenalty,reason);
-    return {early:true,penalty:s.earlyClockOutPenalty};
-  }
-  return {early:false};
-}
+
 
 // Daily sweep — checks if each teacher's class attendance was marked by the cutoff time.
 // Safe to call repeatedly (idempotent) — only logs once per teacher per day.
@@ -3101,6 +3076,7 @@ async function checkDailyAttendanceMerit(){
   try{
     // Always try to self-heal first, regardless of time of day
     await reconcileAttendanceMerit();
+    await reconcileEODMerit();
 
     const s=getMeritSettings();
     const now=new Date();
@@ -3136,6 +3112,24 @@ async function reconcileAttendanceMerit(){
     if(!t) return true;
     const wasMarked=sAtt.some(a=>a.date===m.date&&normClass(a.class)===normClass(t.class));
     if(wasMarked){changed=true;return false;} // remove — they did mark it, just late
+    return true;
+  });
+  if(changed) DB.set('meritPoints',kept);
+}
+
+// Self-heals wrongly-logged "missing EOD" deductions — if a teacher's report
+// for that date actually exists (e.g. they submitted via the standalone panel,
+// or updated it after clocking out), remove the deduction automatically.
+async function reconcileEODMerit(){
+  const merits=await getFreshCollection('meritPoints');
+  const missingEntries=merits.filter(m=>m.category==='missing_eod');
+  if(!missingEntries.length) return;
+  const reports=DB.get('eodReports')||[];
+  let changed=false;
+  const kept=merits.filter(m=>{
+    if(m.category!=='missing_eod') return true;
+    const hasReport=reports.some(r=>r.tid===m.tid&&r.date===m.date);
+    if(hasReport){changed=true;return false;} // remove — a report exists for that day after all
     return true;
   });
   if(changed) DB.set('meritPoints',kept);
@@ -4713,9 +4707,32 @@ async function finalizeClockIn(){
   clearInterval(window._qrClockInterval);
 }
 
-function showEODForm(){
+async function showEODForm(){
   const box=document.getElementById('qrAttendBox');
   clearInterval(window._qrClockInterval);
+
+  // Check if this teacher already submitted an EOD report today (e.g. via the
+  // standalone Merit Points → EOD Reports panel earlier in the day) — if so,
+  // don't ask again and don't penalize them, just confirm and let them clock out.
+  const today=new Date().toISOString().slice(0,10);
+  const existing=await getFreshCollection('eodReports');
+  const already=existing.find(r=>r.tid===qrSelectedTeacher.id&&r.date===today);
+
+  if(already){
+    box.innerHTML=`<div style="text-align:left;max-height:80vh;overflow-y:auto;">
+      <div style="font-family:'Fredoka One',cursive;font-size:1.3rem;color:var(--text);text-align:center;margin-bottom:0.3rem;">✅ Report Already Submitted</div>
+      <div style="font-size:0.82rem;color:var(--text3);text-align:center;margin-bottom:1rem;">Hi ${qrSelectedTeacher.name}, you already sent today's End-of-Day report:</div>
+      <div style="background:var(--bg3);border-radius:10px;padding:0.9rem 1rem;font-size:0.83rem;color:var(--text2);line-height:1.7;white-space:pre-wrap;max-height:220px;overflow-y:auto;margin-bottom:1rem;">${already.summary}</div>
+      <button class="btn btn-green" style="width:100%;justify-content:center;" onclick="finalizeClockOut(true,true)">✅ Clock Out</button>
+      <button style="width:100%;margin-top:0.6rem;background:none;border:none;color:var(--text3);font-size:0.76rem;text-decoration:underline;cursor:pointer;padding:0.4rem;" onclick="showEODFormBlank()">✏️ I want to update it first</button>
+    </div>`;
+    return;
+  }
+  showEODFormBlank();
+}
+
+function showEODFormBlank(){
+  const box=document.getElementById('qrAttendBox');
   box.innerHTML=`<div style="text-align:left;max-height:80vh;overflow-y:auto;">
     <div style="font-family:'Fredoka One',cursive;font-size:1.3rem;color:var(--text);text-align:center;margin-bottom:0.3rem;">📝 End of Day Report</div>
     <div style="font-size:0.82rem;color:var(--text3);text-align:center;margin-bottom:1.2rem;">Hi ${qrSelectedTeacher.name}, quickly fill this before you clock out</div>
@@ -4794,23 +4811,29 @@ async function submitEODFromPanel(){
     reports.push({id:Date.now(),tid:me.id,name:me.name,sid:me.sid||'',date:today,summary:text,ts:new Date().toISOString()});
   }
   DB.set('eodReports',reports);
+  await reconcileEODMerit(); // instantly clear any wrongly-logged "missing EOD" deduction
   window._eodEditing=false;
   renderEODReports();
   showToast('EOD report submitted ✅','success');
 }
 
-async function finalizeClockOut(withEOD){
+async function finalizeClockOut(withEOD,alreadySubmitted){
   const now=new Date();
   const dateStr=now.toISOString().slice(0,10);
   const teacherRec=(DB.get('teachers')||[]).find(t=>t.id===qrSelectedTeacher.id);
   let eodMissing=false;
 
   if(withEOD){
-    const text=collectEODFormText('qeod');
-    if(!text){showToast('Please fill in at least "What did you teach today", or tap Skip below','error');return;}
-    const reports=await getFreshCollection('eodReports');
-    reports.push({id:Date.now(),tid:qrSelectedTeacher.id,name:qrSelectedTeacher.name,sid:teacherRec?.sid||'',date:dateStr,summary:text,ts:now.toISOString()});
-    DB.set('eodReports',reports);
+    if(!alreadySubmitted){
+      const text=collectEODFormText('qeod');
+      if(!text){showToast('Please fill in at least "What did you teach today", or tap Skip below','error');return;}
+      const reports=await getFreshCollection('eodReports');
+      const idx=reports.findIndex(r=>r.tid===qrSelectedTeacher.id&&r.date===dateStr);
+      if(idx>=0){reports[idx].summary=text;reports[idx].ts=now.toISOString();} // update if one already existed
+      else reports.push({id:Date.now(),tid:qrSelectedTeacher.id,name:qrSelectedTeacher.name,sid:teacherRec?.sid||'',date:dateStr,summary:text,ts:now.toISOString()});
+      DB.set('eodReports',reports);
+    }
+    // if alreadySubmitted, the report is already saved from earlier — nothing more to do here
   } else {
     eodMissing=true;
     await logMeritDeduction(qrSelectedTeacher.id,qrSelectedTeacher.name,teacherRec?.sid,dateStr,'missing_eod',getMeritSettings().eodPenalty,'Clocked out without submitting an End-of-Day report');
@@ -4828,22 +4851,16 @@ async function finalizeClockOut(withEOD){
   });
   DB.set('tSessions',sessions);
 
-  const earlyInfo=await checkEarlyClockOutMerit(qrSelectedTeacher.id,qrSelectedTeacher.name,teacherRec?.sid,dateStr,now);
-
   const box=document.getElementById('qrAttendBox');
   const noteHtml=eodMissing
     ? `<div style="background:#FEF2F2;border:1.5px solid #FCA5A5;border-radius:10px;padding:0.7rem 1rem;margin-top:0.8rem;font-size:0.8rem;color:#DC2626;font-weight:700;">⚠️ EOD report skipped — <strong>-${getMeritSettings().eodPenalty} merit points</strong></div>`
     : `<div style="background:var(--green-lt);border:1.5px solid rgba(16,185,129,0.3);border-radius:10px;padding:0.7rem 1rem;margin-top:0.8rem;font-size:0.8rem;color:var(--green);font-weight:700;">✅ End-of-day report submitted — thank you!</div>`;
-  const earlyHtml=earlyInfo.early
-    ? `<div style="background:#FEF2F2;border:1.5px solid #FCA5A5;border-radius:10px;padding:0.7rem 1rem;margin-top:0.6rem;font-size:0.8rem;color:#DC2626;font-weight:700;">🚪 Left before ${fmtTime12(getMeritSettings().clockOutExpectedTime)} — <strong>-${earlyInfo.penalty} merit points</strong></div>`
-    : '';
   box.innerHTML=`<div style="background:var(--red-lt);border:2px solid rgba(239,68,68,0.3);border-radius:16px;padding:2rem;text-align:center;">
     <div style="font-size:3.5rem;margin-bottom:0.5rem">🔴</div>
     <div style="font-family:'Fredoka One',cursive;font-size:1.5rem;color:var(--red);">Clocked Out Successfully</div>
     <div style="font-size:1rem;font-weight:700;color:var(--text);margin:0.5rem 0">${qrSelectedTeacher.name}</div>
     <div style="font-size:0.85rem;color:var(--text3);">${now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true})} · ${now.toLocaleDateString('en-IN')}</div>
     ${noteHtml}
-    ${earlyHtml}
     <button class="btn btn-primary" style="margin-top:1.2rem;width:100%" onclick="resetQRAttend()">← Back (Next Person)</button>
   </div>`;
 }
