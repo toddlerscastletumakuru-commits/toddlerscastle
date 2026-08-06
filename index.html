@@ -2801,17 +2801,24 @@ function updSAsum(){
   document.getElementById('sAttL').textContent=v.filter(x=>x==='Late').length;
 }
 
-function saveSAtt(){
+async function saveSAtt(){
   const date=document.getElementById('sAttDate').value;
   if(!date){showToast('Select a date','error');return;}
   if(!Object.keys(sAS).length){showToast('Mark attendance first','error');return;}
+  const saveBtn=document.querySelector('#panel-satt .btn-green');
+  if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Saving...';}
   const students=DB.get('students')||[];
-  let att=(DB.get('sAtt')||[]).filter(a=>a.date!==date);
+  // Fetch the LATEST attendance data first — never build on a possibly-stale local
+  // copy, or another class's just-saved records could get silently wiped out.
+  let att=(await getFreshCollection('sAtt')).filter(a=>a.date!==date);
   Object.entries(sAS).forEach(([sid,status])=>{
     const s=students.find(x=>x.id==sid);
     att.push({sid:+sid,name:s?.name||'',class:s?.class||'',date,status});
   });
-  DB.set('sAtt',att);showToast('Student attendance saved ✅','success');
+  DB.set('sAtt',att);
+  await reconcileAttendanceMerit(); // instantly clear any wrongly-logged deduction for this date
+  if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='💾 Save Attendance';}
+  showToast('Student attendance saved ✅','success');
 }
 
 // ═══════════════════════════════
@@ -3505,18 +3512,23 @@ function renderEODReports(){
   }
 }
 
-function saveTAtt(){
+async function saveTAtt(){
   const date=document.getElementById('tAttDate').value;
   if(!date){showToast('Select a date','error');return;}
   if(!Object.keys(tAS).length){showToast('Mark attendance first','error');return;}
+  const saveBtn=document.querySelector('#panel-tatt .btn-green');
+  if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Saving...';}
   const teachers=DB.get('teachers')||[];
-  let att=(DB.get('tAtt')||[]).filter(a=>a.date!==date);
+  // Fetch fresh first — never build on a stale local copy, or another device's
+  // just-saved records for a different teacher could get silently wiped out.
+  let att=(await getFreshCollection('tAtt')).filter(a=>a.date!==date);
   Object.entries(tAS).forEach(([tid,status])=>{
     const t=teachers.find(x=>x.id==tid);
     att.push({tid:+tid,name:t?.name||'',desig:t?.desig||'',date,status});
   });
   DB.set('tAtt',att);
-  checkAbsenceMerit(date); // deduct points for unapproved full/half day absences
+  await checkAbsenceMerit(date); // deduct points for unapproved full/half day absences
+  if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='💾 Save Attendance';}
   showToast('Teacher attendance saved ✅','success');
 }
 
