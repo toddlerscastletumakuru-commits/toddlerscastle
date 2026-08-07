@@ -1593,6 +1593,51 @@ tbody td strong{color:var(--text);font-weight:700;}
   </div>
 </div>
 
+<!-- TEACHER FULL REPORT MODAL -->
+<div class="modal-ov" id="teacherReportModal">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-hd">
+      <div class="modal-title">📄 Full Report — <span id="trTeacherName"></span></div>
+      <button class="modal-x" onclick="closeModal('teacherReportModal')">✕</button>
+    </div>
+    <div class="modal-bd">
+      <div style="display:flex;gap:0.7rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
+        <select class="f-sel" id="trPeriod" style="width:auto" onchange="renderTeacherReport()">
+          <option value="7">Last 7 Days</option>
+          <option value="14">Last 14 Days</option>
+          <option value="30" selected>Last 30 Days</option>
+          <option value="90">Last 90 Days</option>
+        </select>
+        <span id="trSummary" style="font-size:0.8rem;color:var(--text3);"></span>
+      </div>
+
+      <div class="card" style="max-height:360px;overflow-y:auto;padding:0;">
+        <table style="width:100%;">
+          <thead style="position:sticky;top:0;background:white;box-shadow:0 1px 0 var(--border);">
+            <tr><th style="text-align:left;padding:0.5rem 0.8rem;font-size:0.72rem;color:var(--text3);">Date</th>
+            <th style="text-align:left;padding:0.5rem 0.8rem;font-size:0.72rem;color:var(--text3);">Status</th>
+            <th style="text-align:left;padding:0.5rem 0.8rem;font-size:0.72rem;color:var(--text3);">Clock In/Out</th>
+            <th style="text-align:left;padding:0.5rem 0.8rem;font-size:0.72rem;color:var(--text3);">EOD</th>
+            <th style="text-align:left;padding:0.5rem 0.8rem;font-size:0.72rem;color:var(--text3);">Merit Notes</th></tr>
+          </thead>
+          <tbody id="trTableBody"></tbody>
+        </table>
+      </div>
+
+      <div style="margin-top:1.2rem;background:var(--primary-lt);border-radius:10px;padding:0.9rem 1rem;">
+        <label class="f-lbl" style="color:var(--primary);">📱 Send this report to</label>
+        <div style="display:flex;gap:0.6rem;margin-top:0.4rem;">
+          <input class="f-in" id="trPhone" type="tel" placeholder="10-digit mobile number" style="flex:1;">
+          <button class="btn btn-green" onclick="sendTeacherReportWhatsApp()">💬 Send via WhatsApp</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="closeModal('teacherReportModal')">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- MANUAL MERIT ENTRY MODAL (Admin only) -->
 <div class="modal-ov" id="manualMeritModal">
   <div class="modal" style="max-width:440px">
@@ -3243,7 +3288,7 @@ function renderMerit(){
         <td><span class="badge b-blue">${t.class}</span></td>
         <td>${badges||'<span style="color:var(--text3);font-size:0.8rem">None 🎉</span>'}</td>
         <td style="text-align:center;font-family:'Fredoka One',cursive;color:${totalColor};font-size:1.1rem;">${displayTotal}</td>
-        <td><button class="btn btn-xs btn-primary" onclick="toggleMeritDetail(${t.id},'${startStr}')">Details</button></td>
+        <td><button class="btn btn-xs btn-primary" onclick="toggleMeritDetail(${t.id},'${startStr}')">Details</button> <button class="btn btn-xs btn-green" onclick="openTeacherReportModal(${t.id})">📄 Full Report</button></td>
       </tr>`;
     }).join('');
   }
@@ -3370,6 +3415,127 @@ function toggleMeritDetail(tid,weekStart){
     <button class="btn btn-primary btn-xs" style="margin-top:0.6rem;" onclick="saveMeritFeedback(${tid},'${weekStart}')">💾 Save Feedback</button>
   </div></div>`;
   area.innerHTML=html;
+}
+
+// ═══════════════════════════════
+//  TEACHER FULL REPORT (day-by-day, WhatsApp-ready)
+// ═══════════════════════════════
+let trCurrentTid=null;
+const TR_CAT_ICON={late_login:'⏰',missing_attendance:'📋',missing_eod:'📝',early_clockout:'🚪',absent_full:'🏖️',absent_half:'🌗',manual:'✍️'};
+const TR_CAT_LABEL={late_login:'Late Login',missing_attendance:'Missing Attendance',missing_eod:'Missing EOD',early_clockout:'Early Clock-Out',absent_full:'Full Day Absence',absent_half:'Half Day Absence',manual:'Manual Entry'};
+
+function openTeacherReportModal(tid){
+  const t=(DB.get('teachers')||[]).find(x=>x.id===tid);
+  if(!t){showToast('Teacher not found','error');return;}
+  trCurrentTid=tid;
+  document.getElementById('trTeacherName').textContent=t.name;
+  document.getElementById('trPhone').value=t.phone||'';
+  document.getElementById('trPeriod').value='30';
+  openModal('teacherReportModal');
+  renderTeacherReport();
+}
+
+// Builds one row of day-by-day data for a teacher on a specific date
+function buildTeacherDayRow(t,dateStr){
+  const tAttRec=(DB.get('tAtt')||[]).find(a=>a.tid===t.id&&a.date===dateStr);
+  const sessions=(DB.get('tSessions')||[]).filter(s=>s.tid===t.id&&s.date===dateStr);
+  const ins=sessions.filter(s=>s.type==='in').map(s=>s.time);
+  const outs=sessions.filter(s=>s.type==='out').map(s=>s.time);
+  const eod=(DB.get('eodReports')||[]).find(r=>r.tid===t.id&&r.date===dateStr);
+  const merits=(DB.get('meritPoints')||[]).filter(m=>m.tid===t.id&&m.date===dateStr);
+  const status=tAttRec?.status || (ins.length?'Present':'—');
+  return {dateStr,status,clockIn:ins[0]||'–',clockOut:outs[outs.length-1]||'–',hasEod:!!eod,merits};
+}
+
+function renderTeacherReport(){
+  if(!trCurrentTid) return;
+  const t=(DB.get('teachers')||[]).find(x=>x.id===trCurrentTid);
+  if(!t) return;
+  const days=parseInt(document.getElementById('trPeriod').value)||30;
+  const today=new Date();
+  const rows=[];
+  for(let i=0;i<days;i++){
+    const d=new Date(today);d.setDate(today.getDate()-i);
+    rows.push(buildTeacherDayRow(t,d.toISOString().slice(0,10)));
+  }
+  // Only show days with SOME activity (attendance, session, EOD, or merit entry) to keep it readable
+  const activeRows=rows.filter(r=>r.status!=='—'||r.clockIn!=='–'||r.hasEod||r.merits.length);
+
+  const netTotal=activeRows.reduce((s,r)=>s+r.merits.reduce((s2,m)=>s2+meritNetEffect(m),0),0);
+  document.getElementById('trSummary').textContent=`${activeRows.length} active day(s) · Net merit change: ${netTotal>=0?'+':''}${netTotal} pts`;
+
+  const statusBadge=s=>{
+    if(s==='Present') return '<span class="badge b-green">✅ Present</span>';
+    if(s==='Absent') return '<span class="badge b-red">❌ Absent</span>';
+    if(s==='Late') return '<span class="badge b-gold">⏰ Late</span>';
+    if(s==='Half Day') return '<span class="badge b-purple">🌗 Half Day</span>';
+    return '<span style="color:var(--text3);font-size:0.75rem;">—</span>';
+  };
+
+  const tbody=document.getElementById('trTableBody');
+  if(!activeRows.length){
+    tbody.innerHTML='<tr><td colspan="5" style="text-align:center;padding:1.5rem;color:var(--text3);font-size:0.85rem;">No activity in this period.</td></tr>';
+    return;
+  }
+  tbody.innerHTML=activeRows.map(r=>{
+    const meritsHtml=r.merits.length
+      ? r.merits.map(m=>{
+          const isBonus=m.type==='bonus';
+          return `<div style="font-size:0.74rem;color:${isBonus?'var(--green)':'var(--red)'};">${TR_CAT_ICON[m.category]||'⚠️'} ${TR_CAT_LABEL[m.category]||m.category} (${isBonus?'+':'-'}${m.points})</div>`;
+        }).join('')
+      : '<span style="color:var(--text3);font-size:0.75rem;">–</span>';
+    return `<tr style="border-top:1px solid var(--border);">
+      <td style="padding:0.5rem 0.8rem;font-size:0.8rem;font-weight:700;white-space:nowrap;">${r.dateStr}</td>
+      <td style="padding:0.5rem 0.8rem;">${statusBadge(r.status)}</td>
+      <td style="padding:0.5rem 0.8rem;font-size:0.78rem;white-space:nowrap;">${r.clockIn} → ${r.clockOut}</td>
+      <td style="padding:0.5rem 0.8rem;font-size:0.78rem;">${r.hasEod?'<span style="color:var(--green);">✅</span>':'<span style="color:var(--text3);">–</span>'}</td>
+      <td style="padding:0.5rem 0.8rem;">${meritsHtml}</td>
+    </tr>`;
+  }).join('');
+}
+
+function buildTeacherReportText(){
+  const t=(DB.get('teachers')||[]).find(x=>x.id===trCurrentTid);
+  if(!t) return '';
+  const days=parseInt(document.getElementById('trPeriod').value)||30;
+  const today=new Date();
+  const rows=[];
+  for(let i=days-1;i>=0;i--){
+    const d=new Date(today);d.setDate(today.getDate()-i);
+    rows.push(buildTeacherDayRow(t,d.toISOString().slice(0,10)));
+  }
+  const activeRows=rows.filter(r=>r.status!=='—'||r.clockIn!=='–'||r.hasEod||r.merits.length);
+  const netTotal=activeRows.reduce((s,r)=>s+r.merits.reduce((s2,m)=>s2+meritNetEffect(m),0),0);
+
+  let msg=`🏰 *Toddler's Castle Pre-School*\n📄 *Merit & Attendance Report*\n\n`;
+  msg+=`👩‍🏫 Teacher: *${t.name}* (${t.desig})\n📅 Period: Last ${days} days\n📊 Net Merit Change: *${netTotal>=0?'+':''}${netTotal} points*\n\n`;
+  msg+=`─────────────────\n`;
+  if(!activeRows.length){
+    msg+=`No recorded activity in this period.\n`;
+  } else {
+    activeRows.forEach(r=>{
+      msg+=`\n📅 *${r.dateStr}* — ${r.status}\n`;
+      if(r.clockIn!=='–') msg+=`   🕐 ${r.clockIn} → ${r.clockOut}\n`;
+      msg+=`   📝 EOD: ${r.hasEod?'Submitted ✅':'Not submitted'}\n`;
+      if(r.merits.length){
+        r.merits.forEach(m=>{
+          const isBonus=m.type==='bonus';
+          msg+=`   ${isBonus?'➕':'➖'} ${TR_CAT_LABEL[m.category]||m.category}: ${isBonus?'+':'-'}${m.points} pts\n`;
+        });
+      }
+    });
+  }
+  msg+=`\n─────────────────\nThank you! 🙏\n— Management`;
+  return msg;
+}
+
+function sendTeacherReportWhatsApp(){
+  const phone=(document.getElementById('trPhone').value||'').replace(/[^0-9]/g,'');
+  if(!phone){showToast('Enter a valid phone number','error');return;}
+  const msg=buildTeacherReportText();
+  const fullPhone=phone.length===10?'91'+phone:phone;
+  const url='https://wa.me/'+fullPhone+'?text='+encodeURIComponent(msg);
+  window.open(url,'_blank');
 }
 
 function saveMeritFeedback(tid,weekStart){
