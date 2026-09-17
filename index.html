@@ -1262,6 +1262,43 @@ tbody td strong{color:var(--text);font-weight:700;}
         <div id="eodMyView" style="display:none;"></div>
       </div>
 
+      <!-- ── LEAVE APPLICATIONS ── -->
+      <div class="panel" id="panel-leaves">
+        <div class="sec-hd">
+          <div class="sec-title">🗓️ Leave Applications</div>
+          <div class="sec-actions" id="leaveTeacherActions" style="display:none;">
+            <button class="btn btn-primary" onclick="openLeaveApplyModal()">+ Apply for Leave</button>
+          </div>
+        </div>
+
+        <div style="background:var(--blue-lt);border:1.5px solid rgba(59,130,246,0.2);border-radius:12px;padding:0.9rem 1.2rem;margin-bottom:1.2rem;font-size:0.82rem;color:var(--text2);">
+          📌 Whether a leave is <strong>Paid</strong> or <strong>Unpaid</strong> is decided by the Principal when reviewing the application.
+        </div>
+
+        <!-- ADMIN / PRINCIPAL VIEW: all applications -->
+        <div id="leaveAdminView" style="display:none;">
+          <div style="margin-bottom:1rem;display:flex;gap:0.6rem;flex-wrap:wrap;">
+            <select class="f-sel" id="leaveStatusFilter" style="width:auto" onchange="renderLeaves()">
+              <option value="">All Statuses</option>
+              <option value="Pending">Pending</option>
+              <option value="Approved">Approved</option>
+              <option value="Rejected">Rejected</option>
+            </select>
+          </div>
+          <div class="card"><div class="tbl-wrap">
+            <table>
+              <thead><tr>
+                <th>Teacher</th><th>Dates</th><th>Days</th><th>Reason</th><th>Pay Status</th><th>Status</th><th></th>
+              </tr></thead>
+              <tbody id="leaveTableBody"></tbody>
+            </table>
+          </div></div>
+        </div>
+
+        <!-- TEACHER'S OWN VIEW -->
+        <div id="leaveMyView" style="display:none;"></div>
+      </div>
+
       <!-- ── BACKUP ── -->
       <div class="panel" id="panel-backup">
         <div class="sec-hd"><div class="sec-title">🛡️ Backup & Restore</div></div>
@@ -1638,6 +1675,76 @@ tbody td strong{color:var(--text);font-weight:700;}
   </div>
 </div>
 
+<!-- MONTHLY TEACHER REPORT MODAL (downloadable/printable) -->
+<div class="modal-ov" id="monthlyReportModal">
+  <div class="modal" style="max-width:760px">
+    <div class="modal-hd">
+      <div class="modal-title">📅 Monthly Report — <span id="mrTeacherName"></span></div>
+      <button class="modal-x" onclick="closeModal('monthlyReportModal')">✕</button>
+    </div>
+    <div class="modal-bd">
+      <div style="display:flex;gap:0.7rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
+        <input type="month" class="f-sel" id="mrMonth" style="width:auto" onchange="renderMonthlyReport()">
+        <button class="btn btn-green btn-xs" onclick="printMonthlyReport()">🖨️ Print / Download</button>
+      </div>
+      <div id="mrSummaryGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:0.6rem;margin-bottom:1.1rem;"></div>
+      <div class="card" style="max-height:340px;overflow-y:auto;padding:0;">
+        <table style="width:100%;">
+          <thead style="position:sticky;top:0;background:white;box-shadow:0 1px 0 var(--border);">
+            <tr><th style="text-align:left;padding:0.5rem 0.8rem;font-size:0.72rem;color:var(--text3);">Date</th>
+            <th style="text-align:left;padding:0.5rem 0.8rem;font-size:0.72rem;color:var(--text3);">Status</th>
+            <th style="text-align:left;padding:0.5rem 0.8rem;font-size:0.72rem;color:var(--text3);">Clock In</th>
+            <th style="text-align:left;padding:0.5rem 0.8rem;font-size:0.72rem;color:var(--text3);">Clock Out</th>
+            <th style="text-align:left;padding:0.5rem 0.8rem;font-size:0.72rem;color:var(--text3);">Merit</th></tr>
+          </thead>
+          <tbody id="mrTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="closeModal('monthlyReportModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- LEAVE APPLY MODAL (Teacher) -->
+<div class="modal-ov" id="leaveApplyModal">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title">🗓️ Apply for Leave</div><button class="modal-x" onclick="closeModal('leaveApplyModal')">✕</button></div>
+    <div class="modal-bd">
+      <div class="f-grid">
+        <div class="f-row"><label class="f-lbl">From Date <span class="req">*</span></label><input class="f-in" type="date" id="lv_from"></div>
+        <div class="f-row"><label class="f-lbl">To Date <span class="req">*</span></label><input class="f-in" type="date" id="lv_to"></div>
+        <div class="f-row full"><label class="f-lbl">Reason <span class="req">*</span></label><textarea class="f-in" id="lv_reason" rows="3" placeholder="Reason for leave"></textarea></div>
+      </div>
+      <div style="font-size:0.75rem;color:var(--text3);margin-top:0.3rem;">Note: Whether this leave is Paid or Unpaid will be decided by the Principal when reviewing your application.</div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="closeModal('leaveApplyModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitLeaveApplication()">Submit Application</button>
+    </div>
+  </div>
+</div>
+
+<!-- LEAVE ACTION MODAL (Admin/Principal review) -->
+<div class="modal-ov" id="leaveActionModal">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title">🗓️ Review Leave Application</div><button class="modal-x" onclick="closeModal('leaveActionModal')">✕</button></div>
+    <div class="modal-bd">
+      <div id="leaveActionDetails" style="background:var(--bg3);border-radius:10px;padding:0.9rem 1rem;margin-bottom:1rem;font-size:0.85rem;color:var(--text2);line-height:1.8;"></div>
+      <div class="f-row full">
+        <label class="f-lbl">Pay Status <span style="font-weight:600;color:var(--text3);text-transform:none;">(Principal only)</span></label>
+        <select class="f-sel" id="lv_payStatus"><option>Undecided</option><option>Paid</option><option>Unpaid</option></select>
+      </div>
+      <div class="f-row full"><label class="f-lbl">Note (optional)</label><textarea class="f-in" id="lv_note" rows="2" placeholder="Any note for the teacher"></textarea></div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-danger" onclick="submitLeaveAction('Rejected')">✕ Reject</button>
+      <button class="btn btn-green" onclick="submitLeaveAction('Approved')">✅ Approve</button>
+    </div>
+  </div>
+</div>
+
 <!-- MANUAL MERIT ENTRY MODAL (Admin only) -->
 <div class="modal-ov" id="manualMeritModal">
   <div class="modal" style="max-width:440px">
@@ -1838,7 +1945,7 @@ const DB = {
   }
 };
 
-const BK_KEYS = ['users','students','teachers','enquiries','admissions','sAtt','tAtt','feePayments','expenses','tSessions','meritPoints','eodReports','meritFeedback','meritSettings'];
+const BK_KEYS = ['users','students','teachers','enquiries','admissions','sAtt','tAtt','feePayments','expenses','tSessions','meritPoints','eodReports','meritFeedback','meritSettings','leaveApplications'];
 
 // ───────────────────────────────
 //  localStorage AUTO-BACKUP (safety net)
@@ -1987,6 +2094,7 @@ function initDB(){
   if(!DB.get('meritPoints'))    DB.set('meritPoints',[]);
   if(!DB.get('eodReports'))     DB.set('eodReports',[]);
   if(!DB.get('meritFeedback'))  DB.set('meritFeedback',[]);
+  if(!DB.get('leaveApplications')) DB.set('leaveApplications',[]);
   if(!DB.get('meritSettings'))  DB.set('meritSettings',{
     loginExpectedTime:'09:30', loginGraceMin:2, loginPenalty:2,
     attCutoffTime:'11:30', attPenalty:1,
@@ -2040,6 +2148,7 @@ const NAV={
     {id:'qrstation',icon:'📡',label:'QR Station'},
     {id:'merit',icon:'🏅',label:'Merit Points'},
     {id:'eod',icon:'📝',label:'EOD Reports'},
+    {id:'leaves',icon:'🗓️',label:'Leave Applications'},
     {id:'fees',icon:'💰',label:'Fee Management'},
     {id:'expenses',icon:'🧾',label:'Expenses'},
     {id:'reports',icon:'📈',label:'Reports'},
@@ -2058,6 +2167,7 @@ const NAV={
     {id:'qrstation',icon:'📡',label:'QR Station'},
     {id:'merit',icon:'🏅',label:'Merit Points'},
     {id:'eod',icon:'📝',label:'EOD Reports'},
+    {id:'leaves',icon:'🗓️',label:'Leave Applications'},
     {id:'fees',icon:'💰',label:'Fee Management'},
     {id:'reports',icon:'📈',label:'Reports'},
     {id:'idcards',icon:'🪪',label:'ID Cards'},
@@ -2069,10 +2179,11 @@ const NAV={
     {id:'satt',icon:'✅',label:'Student Attendance'},
     {id:'eod',icon:'📝',label:'📝 EOD Report'},
     {id:'merit',icon:'🏅',label:'My Merit Points'},
+    {id:'leaves',icon:'🗓️',label:'🗓️ Leave Application'},
   ]
 };
 
-const PANEL_TITLES={dashboard:'Dashboard',enquiries:'Admission Enquiries',admissions:'Admissions',students:'Student Management',teachers:'Teacher Management',satt:'Student Attendance',tatt:'Teacher Attendance',fees:'Fee Management',expenses:'Expense Tracker',reports:'Reports & Downloads',idcards:'🪪 ID Cards',qrstation:'📡 QR Attendance Station',merit:'🏅 Merit Points',eod:'📝 End of Day Reports',backup:'Backup & Restore',settings:'Settings'};
+const PANEL_TITLES={dashboard:'Dashboard',enquiries:'Admission Enquiries',admissions:'Admissions',students:'Student Management',teachers:'Teacher Management',satt:'Student Attendance',tatt:'Teacher Attendance',fees:'Fee Management',expenses:'Expense Tracker',reports:'Reports & Downloads',idcards:'🪪 ID Cards',qrstation:'📡 QR Attendance Station',merit:'🏅 Merit Points',eod:'📝 End of Day Reports',leaves:'🗓️ Leave Applications',backup:'Backup & Restore',settings:'Settings'};
 
 function initApp(){
   // sidebar user info
@@ -2129,6 +2240,7 @@ function showPanel(id){
     qrstation:renderQRStation,
     merit:renderMerit,
     eod:renderEODReports,
+    leaves:renderLeaves,
     fees:()=>{populateFeeStudents();renderFees();renderFeeSummary();},
     expenses:()=>{renderExpenses();renderExpSummary();},
     reports:()=>renderRepAtt(),
@@ -3288,7 +3400,7 @@ function renderMerit(){
         <td><span class="badge b-blue">${t.class}</span></td>
         <td>${badges||'<span style="color:var(--text3);font-size:0.8rem">None 🎉</span>'}</td>
         <td style="text-align:center;font-family:'Fredoka One',cursive;color:${totalColor};font-size:1.1rem;">${displayTotal}</td>
-        <td><button class="btn btn-xs btn-primary" onclick="toggleMeritDetail(${t.id},'${startStr}')">Details</button> <button class="btn btn-xs btn-green" onclick="openTeacherReportModal(${t.id})">📄 Full Report</button></td>
+        <td><button class="btn btn-xs btn-primary" onclick="toggleMeritDetail(${t.id},'${startStr}')">Details</button> <button class="btn btn-xs btn-green" onclick="openTeacherReportModal(${t.id})">📄 Full Report</button> <button class="btn btn-xs btn-gold" onclick="openMonthlyReportModal(${t.id})">📅 Monthly Report</button></td>
       </tr>`;
     }).join('');
   }
@@ -3538,6 +3650,206 @@ function sendTeacherReportWhatsApp(){
   window.open(url,'_blank');
 }
 
+// ═══════════════════════════════
+//  MONTHLY TEACHER REPORT (downloadable/printable)
+//  Late logins, clock-out times, leave days (no login = leave), and
+//  total merit points for a chosen calendar month — for review meetings.
+// ═══════════════════════════════
+let mrCurrentTid=null;
+const pad2=n=>String(n).padStart(2,'0');
+
+function openMonthlyReportModal(tid){
+  const t=(DB.get('teachers')||[]).find(x=>x.id===tid);
+  if(!t){showToast('Teacher not found','error');return;}
+  mrCurrentTid=tid;
+  document.getElementById('mrTeacherName').textContent=t.name;
+  const now=new Date();
+  document.getElementById('mrMonth').value=`${now.getFullYear()}-${pad2(now.getMonth()+1)}`;
+  openModal('monthlyReportModal');
+  renderMonthlyReport();
+}
+
+// Builds one row per calendar day of the month for a teacher, plus a summary.
+function buildMonthlyReportData(tid,monthStr){
+  const t=(DB.get('teachers')||[]).find(x=>x.id===tid);
+  const [year,month]=monthStr.split('-').map(Number);
+  const daysInMonth=new Date(year,month,0).getDate();
+  const tAtt=DB.get('tAtt')||[];
+  const sessions=DB.get('tSessions')||[];
+  const merits=DB.get('meritPoints')||[];
+  const leaves=(DB.get('leaveApplications')||[]).filter(a=>a.tid===tid&&a.status==='Approved');
+
+  const rows=[];
+  const summary={sundays:0,workingDays:0,present:0,late:0,halfDay:0,absent:0,leavePaid:0,leaveUnpaid:0,leaveUnmarked:0,missingClockOut:0,netMerit:0};
+
+  for(let d=1;d<=daysInMonth;d++){
+    const dateStr=`${year}-${pad2(month)}-${pad2(d)}`;
+    const dow=new Date(year,month-1,d).getDay(); // 0=Sun
+    const dayMerits=merits.filter(m=>m.tid===tid&&m.date===dateStr);
+    const netMerit=dayMerits.reduce((s,m)=>s+meritNetEffect(m),0);
+    summary.netMerit+=netMerit;
+
+    if(dow===0){
+      summary.sundays++;
+      rows.push({dateStr,dow,status:'Weekly Off (Sunday)',clockIn:'–',clockOut:'–',late:false,missingOut:false,merits:dayMerits,netMerit});
+      continue;
+    }
+    summary.workingDays++;
+
+    const daySessions=sessions.filter(s=>s.tid===tid&&s.date===dateStr);
+    const ins=daySessions.filter(s=>s.type==='in').sort((a,b)=>a.id-b.id).map(s=>s.time);
+    const outs=daySessions.filter(s=>s.type==='out').sort((a,b)=>a.id-b.id).map(s=>s.time);
+    const clockIn=ins[0]||'–';
+    const clockOut=outs[outs.length-1]||'–';
+    const lateLoginEntry=dayMerits.find(m=>m.category==='late_login');
+    const missingOut=clockIn!=='–'&&clockOut==='–';
+    if(missingOut) summary.missingClockOut++;
+
+    const tAttRec=tAtt.find(a=>a.tid===tid&&a.date===dateStr);
+    let status;
+    if(tAttRec&&(tAttRec.status==='Present'||tAttRec.status==='Late')){
+      status=lateLoginEntry?'Late':'Present';
+      if(lateLoginEntry) summary.late++; else summary.present++;
+    } else if(tAttRec&&tAttRec.status==='Half Day'){
+      status='Half Day'; summary.halfDay++;
+    } else if(tAttRec&&tAttRec.status==='Absent'){
+      status='Absent'; summary.absent++;
+    } else {
+      const onLeave=leaves.find(l=>dateStr>=l.fromDate&&dateStr<=l.toDate);
+      if(onLeave){
+        status=onLeave.payStatus==='Paid'?'Leave (Paid)':onLeave.payStatus==='Unpaid'?'Leave (Unpaid)':'Leave (Undecided)';
+        if(onLeave.payStatus==='Paid') summary.leavePaid++; else if(onLeave.payStatus==='Unpaid') summary.leaveUnpaid++; else summary.leaveUnmarked++;
+      } else if(clockIn==='–'){
+        status='No Login — Leave'; summary.leaveUnmarked++;
+      } else {
+        status=lateLoginEntry?'Late':'Present';
+        if(lateLoginEntry) summary.late++; else summary.present++;
+      }
+    }
+    rows.push({dateStr,dow,status,clockIn,clockOut,late:!!lateLoginEntry,missingOut,merits:dayMerits,netMerit});
+  }
+  return {teacher:t,monthStr,rows,summary};
+}
+
+function monthLabel(monthStr){
+  const [y,m]=monthStr.split('-').map(Number);
+  return new Date(y,m-1,1).toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+}
+
+function renderMonthlyReport(){
+  if(!mrCurrentTid) return;
+  const monthStr=document.getElementById('mrMonth').value;
+  if(!monthStr) return;
+  const {rows,summary}=buildMonthlyReportData(mrCurrentTid,monthStr);
+
+  const sc=(icon,num,lbl,color)=>`<div style="background:var(--bg3);border-radius:10px;padding:0.7rem 0.8rem;text-align:center;">
+    <div style="font-size:1.1rem;">${icon}</div>
+    <div style="font-family:'Fredoka One',cursive;font-size:1.15rem;color:${color||'var(--text)'};">${num}</div>
+    <div style="font-size:0.68rem;color:var(--text3);">${lbl}</div></div>`;
+  document.getElementById('mrSummaryGrid').innerHTML=
+    sc('📅',summary.workingDays,'Working Days')+
+    sc('✅',summary.present,'Present','var(--green)')+
+    sc('⏰',summary.late,'Late Logins','var(--gold)')+
+    sc('🌗',summary.halfDay,'Half Day','var(--purple)')+
+    sc('❌',summary.absent,'Absent','var(--red)')+
+    sc('💰',summary.leavePaid,'Paid Leave','var(--green)')+
+    sc('🚫',summary.leaveUnpaid,'Unpaid Leave','var(--red)')+
+    sc('❓',summary.leaveUnmarked,'Leave/No Login','var(--gold)')+
+    sc('⚠️',summary.missingClockOut,'Missed Clock-Out','var(--red)')+
+    sc('🏅',(summary.netMerit>=0?'+':'')+summary.netMerit,'Net Merit Points',summary.netMerit>=0?'var(--green)':'var(--red)');
+
+  const statusColor=s=>{
+    if(s==='Present') return 'var(--green)';
+    if(s==='Late') return 'var(--gold)';
+    if(s==='Half Day') return 'var(--purple)';
+    if(s==='Absent') return 'var(--red)';
+    if(s.startsWith('Leave')||s==='No Login — Leave') return 'var(--red)';
+    return 'var(--text3)';
+  };
+  document.getElementById('mrTableBody').innerHTML=rows.map(r=>`<tr style="border-top:1px solid var(--border);${r.dow===0?'background:var(--bg3);':''}">
+    <td style="padding:0.45rem 0.8rem;font-size:0.78rem;font-weight:700;white-space:nowrap;">${r.dateStr}</td>
+    <td style="padding:0.45rem 0.8rem;font-size:0.78rem;font-weight:700;color:${statusColor(r.status)};">${r.status}${r.missingOut?' ⚠️':''}</td>
+    <td style="padding:0.45rem 0.8rem;font-size:0.76rem;">${r.clockIn}</td>
+    <td style="padding:0.45rem 0.8rem;font-size:0.76rem;">${r.clockOut}</td>
+    <td style="padding:0.45rem 0.8rem;font-size:0.76rem;color:${r.netMerit>=0?'var(--green)':'var(--red)'};">${r.merits.length?(r.netMerit>=0?'+':'')+r.netMerit:'–'}</td>
+  </tr>`).join('');
+}
+
+function printMonthlyReport(){
+  if(!mrCurrentTid) return;
+  const monthStr=document.getElementById('mrMonth').value;
+  if(!monthStr) return;
+  const {teacher,rows,summary}=buildMonthlyReportData(mrCurrentTid,monthStr);
+  const mLabel=monthLabel(monthStr);
+
+  const statusColor=s=>{
+    if(s==='Present') return '#10B981';
+    if(s==='Late') return '#F59E0B';
+    if(s==='Half Day') return '#8B5CF6';
+    if(s==='Absent') return '#EF4444';
+    if(s.startsWith('Leave')||s==='No Login — Leave') return '#EF4444';
+    return '#94A3B8';
+  };
+  const summaryCells=[
+    ['Working Days',summary.workingDays],
+    ['Present',summary.present],
+    ['Late Logins',summary.late],
+    ['Half Day',summary.halfDay],
+    ['Absent',summary.absent],
+    ['Paid Leave',summary.leavePaid],
+    ['Unpaid Leave',summary.leaveUnpaid],
+    ['Leave / No Login',summary.leaveUnmarked],
+    ['Missed Clock-Out',summary.missingClockOut],
+    ['Net Merit Points',(summary.netMerit>=0?'+':'')+summary.netMerit],
+  ].map(([lbl,val])=>`<div style="border:1px solid #E2E8F0;border-radius:8px;padding:8px 10px;text-align:center;">
+      <div style="font-size:1.05rem;font-weight:800;color:#1E293B;">${val}</div>
+      <div style="font-size:0.68rem;color:#64748B;">${lbl}</div></div>`).join('');
+
+  const rowsHtml=rows.map(r=>{
+    const meritsTxt=r.merits.length?r.merits.map(m=>{
+      const isBonus=m.type==='bonus';
+      return `${TR_CAT_LABEL[m.category]||m.category} (${isBonus?'+':'-'}${m.points})`;
+    }).join(', '):'–';
+    return `<tr style="${r.dow===0?'background:#F8FAFC;':''}">
+      <td style="padding:5px 8px;border-bottom:1px solid #EEF2F6;font-size:0.78rem;font-weight:700;white-space:nowrap;">${r.dateStr}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #EEF2F6;font-size:0.78rem;font-weight:700;color:${statusColor(r.status)};">${r.status}${r.missingOut?' ⚠️':''}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #EEF2F6;font-size:0.76rem;">${r.clockIn}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #EEF2F6;font-size:0.76rem;">${r.clockOut}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #EEF2F6;font-size:0.74rem;color:#475569;">${meritsTxt}</td>
+    </tr>`;
+  }).join('');
+
+  const win=window.open('','_blank');
+  const html=`<!DOCTYPE html><html><head><title>Monthly Report - ${teacher.name} - ${mLabel}</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;color:#1E293B;margin:24px;}
+    h1{font-size:1.3rem;color:#FF6B35;margin:0 0 2px;}
+    .sub{color:#64748B;font-size:0.82rem;margin-bottom:14px;}
+    table{width:100%;border-collapse:collapse;margin-top:14px;}
+    th{text-align:left;padding:6px 8px;font-size:0.72rem;color:#64748B;border-bottom:2px solid #E2E8F0;}
+    .sumgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:10px;}
+    .note{font-size:0.72rem;color:#94A3B8;margin-top:16px;}
+    @media print{ button{display:none!important;} }
+    .pbtn{margin-top:18px;background:#FF6B35;color:white;border:none;padding:10px 22px;border-radius:8px;font-size:0.9rem;cursor:pointer;}
+  </style></head><body>
+  <h1>🏰 Toddler's Castle Pre-School</h1>
+  <div class="sub">Monthly Attendance &amp; Merit Report — ${mLabel}</div>
+  <div style="margin-top:6px;font-size:0.9rem;"><strong>${teacher.name}</strong> — ${teacher.desig||''} ${teacher.class?('· '+teacher.class):''} ${teacher.sid?('· Staff ID: '+teacher.sid):''}</div>
+
+  <div class="sumgrid">${summaryCells}</div>
+
+  <table>
+    <thead><tr><th>Date</th><th>Status</th><th>Clock In</th><th>Clock Out</th><th>Merit Entries</th></tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+
+  <div class="note">Sundays are the weekly off day and excluded from working-day counts. A day with no clock-in and no approved leave on file is shown as "No Login — Leave". Generated on ${new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'})}.</div>
+  <button class="pbtn" onclick="window.print()">🖨️ Print / Save as PDF</button>
+  </body></html>`;
+  win.document.write(html);
+  win.document.close();
+}
+
 function saveMeritFeedback(tid,weekStart){
   const text=(document.getElementById('meritFb-'+tid).value||'').trim();
   let fbs=DB.get('meritFeedback')||[];
@@ -3546,6 +3858,143 @@ function saveMeritFeedback(tid,weekStart){
   else fbs.push({id:Date.now(),tid,weekStart,text,by:CU.name,date:new Date().toISOString().slice(0,10)});
   DB.set('meritFeedback',fbs);
   showToast('Feedback saved ✅','success');
+}
+
+// ═══════════════════════════════
+//  LEAVE APPLICATIONS
+// ═══════════════════════════════
+function leaveStatusBadge(status){
+  if(status==='Approved') return '<span class="badge b-green">✅ Approved</span>';
+  if(status==='Rejected') return '<span class="badge b-red">❌ Rejected</span>';
+  return '<span class="badge b-gold">⏳ Pending</span>';
+}
+function leavePayBadge(payStatus){
+  if(payStatus==='Paid') return '<span class="badge b-green">💰 Paid</span>';
+  if(payStatus==='Unpaid') return '<span class="badge b-red">🚫 Unpaid</span>';
+  return '<span style="color:var(--text3);font-size:0.78rem;">Undecided</span>';
+}
+function leaveDaysBetween(fromStr,toStr){
+  const a=new Date(fromStr+'T00:00:00'),b=new Date(toStr+'T00:00:00');
+  return Math.round((b-a)/86400000)+1;
+}
+
+function renderLeaves(){
+  const isTeacherViewer=CU&&CU.role==='teacher';
+  const adminView=document.getElementById('leaveAdminView');
+  const myView=document.getElementById('leaveMyView');
+  const teacherActions=document.getElementById('leaveTeacherActions');
+  const apps=DB.get('leaveApplications')||[];
+
+  if(isTeacherViewer){
+    adminView.style.display='none';
+    myView.style.display='block';
+    teacherActions.style.display='flex';
+    const me=getMyTeacherRecord();
+    if(!me){myView.innerHTML='<div class="empty"><div class="ei">🗓️</div><p>Staff record not found. Contact admin.</p></div>';return;}
+    const mine=apps.filter(a=>a.tid===me.id).sort((a,b)=>b.appliedDate.localeCompare(a.appliedDate));
+    if(!mine.length){
+      myView.innerHTML='<div class="empty"><div class="ei">🗓️</div><p>No leave applications yet.</p></div>';
+      return;
+    }
+    myView.innerHTML='<div class="card"><div class="tbl-wrap"><table><thead><tr><th>Dates</th><th>Days</th><th>Reason</th><th>Pay Status</th><th>Status</th><th>Note</th></tr></thead><tbody>'
+      +mine.map(a=>`<tr>
+        <td>${a.fromDate} → ${a.toDate}</td>
+        <td>${a.days}</td>
+        <td style="max-width:220px;">${a.reason}</td>
+        <td>${leavePayBadge(a.payStatus)}</td>
+        <td>${leaveStatusBadge(a.status)}</td>
+        <td style="font-size:0.78rem;color:var(--text3);max-width:180px;">${a.reviewNote||'–'}</td>
+      </tr>`).join('')
+      +'</tbody></table></div></div>';
+  } else {
+    adminView.style.display='block';
+    myView.style.display='none';
+    teacherActions.style.display='none';
+    const filterSel=document.getElementById('leaveStatusFilter');
+    const filter=filterSel?filterSel.value:'';
+    let list=apps.slice().sort((a,b)=>b.appliedDate.localeCompare(a.appliedDate));
+    if(filter) list=list.filter(a=>a.status===filter);
+    const tbody=document.getElementById('leaveTableBody');
+    if(!list.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text3)">No leave applications.</td></tr>';return;}
+    tbody.innerHTML=list.map(a=>`<tr>
+      <td><strong>${a.teacherName}</strong><br><small style="color:var(--text3)">${a.sid||''}</small></td>
+      <td>${a.fromDate} → ${a.toDate}</td>
+      <td>${a.days}</td>
+      <td style="max-width:200px;">${a.reason}</td>
+      <td>${leavePayBadge(a.payStatus)}</td>
+      <td>${leaveStatusBadge(a.status)}</td>
+      <td>${a.status==='Pending'?`<button class="btn btn-xs btn-primary" onclick="openLeaveActionModal(${a.id})">Review</button>`:`<button class="btn btn-xs btn-ghost" onclick="openLeaveActionModal(${a.id})">View</button>`}</td>
+    </tr>`).join('');
+  }
+}
+
+function openLeaveApplyModal(){
+  document.getElementById('lv_from').value=new Date().toISOString().slice(0,10);
+  document.getElementById('lv_to').value=new Date().toISOString().slice(0,10);
+  document.getElementById('lv_reason').value='';
+  openModal('leaveApplyModal');
+}
+
+async function submitLeaveApplication(){
+  const me=getMyTeacherRecord();
+  if(!me){showToast('Staff record not found. Contact admin.','error');return;}
+  const from=document.getElementById('lv_from').value;
+  const to=document.getElementById('lv_to').value;
+  const reason=(document.getElementById('lv_reason').value||'').trim();
+  if(!from||!to){showToast('Select both dates','error');return;}
+  if(to<from){showToast('"To" date cannot be before "From" date','error');return;}
+  if(!reason){showToast('Please enter a reason','error');return;}
+  const apps=await getFreshCollection('leaveApplications');
+  apps.push({
+    id:Date.now(),
+    tid:me.id, teacherName:me.name, sid:me.sid||'',
+    fromDate:from, toDate:to, days:leaveDaysBetween(from,to),
+    reason, appliedDate:new Date().toISOString().slice(0,10),
+    status:'Pending', payStatus:'Undecided',
+    reviewedBy:null, reviewedDate:null, reviewNote:''
+  });
+  DB.set('leaveApplications',apps);
+  closeModal('leaveApplyModal');
+  showToast('Leave application submitted ✅','success');
+  renderLeaves();
+}
+
+let leaveActionAppId=null;
+function openLeaveActionModal(appId){
+  const a=(DB.get('leaveApplications')||[]).find(x=>x.id===appId);
+  if(!a){showToast('Application not found','error');return;}
+  leaveActionAppId=appId;
+  document.getElementById('leaveActionDetails').innerHTML=`
+    <strong>${a.teacherName}</strong> (${a.sid||''})<br>
+    📅 ${a.fromDate} → ${a.toDate} (${a.days} day${a.days>1?'s':''})<br>
+    📝 ${a.reason}<br>
+    Applied on ${a.appliedDate} · Current status: ${leaveStatusBadge(a.status)}
+    ${a.reviewedBy?`<br>Reviewed by ${a.reviewedBy} on ${a.reviewedDate}`:''}`;
+  const paySel=document.getElementById('lv_payStatus');
+  paySel.value=a.payStatus||'Undecided';
+  const canDecidePay=CU&&CU.role==='principal';
+  paySel.disabled=!canDecidePay;
+  document.getElementById('lv_note').value=a.reviewNote||'';
+  const modal=document.getElementById('leaveActionModal');
+  modal.querySelectorAll('.btn-danger,.btn-green').forEach(b=>b.style.display=a.status==='Pending'?'':'none');
+  openModal('leaveActionModal');
+}
+
+async function submitLeaveAction(decision){
+  if(!leaveActionAppId) return;
+  const apps=await getFreshCollection('leaveApplications');
+  const idx=apps.findIndex(x=>x.id===leaveActionAppId);
+  if(idx<0){showToast('Application not found','error');return;}
+  const canDecidePay=CU&&CU.role==='principal';
+  apps[idx].status=decision;
+  apps[idx].reviewedBy=CU.name;
+  apps[idx].reviewedDate=new Date().toISOString().slice(0,10);
+  apps[idx].reviewNote=(document.getElementById('lv_note').value||'').trim();
+  if(canDecidePay) apps[idx].payStatus=document.getElementById('lv_payStatus').value;
+  DB.set('leaveApplications',apps);
+  closeModal('leaveActionModal');
+  showToast(`Leave ${decision.toLowerCase()} ✅`,'success');
+  renderLeaves();
 }
 
 // ─── EOD Reports Viewer ───
